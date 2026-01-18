@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { getAuthToken } from "./authToken";
 
 type ServerToClientEvents = {
   "chat:new": (payload: any) => void;
@@ -22,12 +23,17 @@ type ServerToClientEvents = {
   "room:invited": (payload: any) => void;
 };
 
-
 type ClientToServerEvents = {
   "chat:join": (payload: { conversationId: string }) => void;
   "chat:leave": (payload: { conversationId: string }) => void;
   // conversationId is preferred (works for both DM + GROUP). otherUserId is a fallback for first-time DM.
-  "chat:send": (payload: { conversationId?: string; otherUserId?: string; text?: string; type?: "TEXT" | "IMAGE" | "FILE"; attachments?: any }) => void;
+  "chat:send": (payload: {
+    conversationId?: string;
+    otherUserId?: string;
+    text?: string;
+    type?: "TEXT" | "IMAGE" | "FILE";
+    attachments?: any;
+  }) => void;
   "chat:read": (payload: { conversationId: string }) => void;
   "chat:typing": (payload: { conversationId: string; isTyping: boolean }) => void;
 
@@ -41,12 +47,7 @@ type ClientToServerEvents = {
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 
 function getToken() {
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
+  return getAuthToken();
 }
 
 function getWsOrigin() {

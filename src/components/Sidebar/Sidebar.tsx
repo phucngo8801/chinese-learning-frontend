@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import "./Sidebar.css";
 import { clearLocalUid } from "../../lib/vocabLocal";
+import { clearAuthToken, getAuthToken } from "../../lib/authToken";
 
 type StreakStatus = {
   currentStreak: number;
@@ -24,6 +25,16 @@ type NavItem = {
 };
 
 type MascotMode = "kid" | "cat" | "slime";
+
+type SidebarProps = {
+  /**
+   * Mobile drawer state (controlled by AppLayout).
+   * On desktop, Sidebar is always visible.
+   */
+  mobileOpen?: boolean;
+  /** Request parent to close the drawer (e.g. when navigating). */
+  onRequestClose?: () => void;
+};
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -178,10 +189,14 @@ function DropdownGroup({
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [streak, setStreak] = useState<StreakStatus | null>(null);
-  const [mythic, setMythic] = useState(true);
+  const [mythic, setMythic] = useState(false);
+
+  // Perf guards: disable heavy effects on reduced-motion / coarse pointer / small screens
+  const [allowFx, setAllowFx] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [mascot, setMascot] = useState<MascotMode>(() => {
     const v = localStorage.getItem("mascotMode");
@@ -192,6 +207,43 @@ export default function Sidebar() {
   const location = useLocation();
   const sbRef = useRef<HTMLElement | null>(null);
   const smokeLayerRef = useRef<HTMLDivElement | null>(null);
+
+  // Detect "mobile" and motion/pointer preferences once, then keep them in sync.
+  useEffect(() => {
+    const mqMobile = window.matchMedia("(max-width: 860px)");
+    const mqReduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const mqPointerFine = window.matchMedia("(pointer: fine)");
+
+    const sync = () => {
+      const mobile = mqMobile.matches;
+      setIsMobile(mobile);
+      // Allow FX only when:
+      // - not mobile
+      // - not reduced motion
+      // - pointer is fine (mouse/trackpad) to avoid running hover FX on touch devices
+      setAllowFx(!mobile && !mqReduce.matches && mqPointerFine.matches);
+    };
+
+    sync();
+
+    mqMobile.addEventListener("change", sync);
+    mqReduce.addEventListener("change", sync);
+    mqPointerFine.addEventListener("change", sync);
+
+    return () => {
+      mqMobile.removeEventListener("change", sync);
+      mqReduce.removeEventListener("change", sync);
+      mqPointerFine.removeEventListener("change", sync);
+    };
+  }, []);
+
+  // If user navigates on mobile, close the drawer so content is visible.
+  useEffect(() => {
+    if (!isMobile) return;
+    if (!mobileOpen) return;
+    onRequestClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const NAV_MAIN: NavItem[] = [
     { to: "/learn-vocab", label: "Học từ vựng", icon: "📖" },
@@ -230,9 +282,7 @@ export default function Sidebar() {
   }, [activePath]);
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("access_token");
+    clearAuthToken();
 
     clearLocalUid();
 
@@ -246,10 +296,12 @@ export default function Sidebar() {
   };
 
   const spawnSmoke = (x: number, y: number, power = 1) => {
+    if (!allowFx) return;
     const layer = smokeLayerRef.current;
     if (!layer) return;
 
-    const puffCount = clamp(Math.round(7 * power), 5, 14);
+    // Keep this intentionally light; too many DOM nodes here will make low-end devices lag.
+    const puffCount = clamp(Math.round(4 * power), 3, 8);
 
     for (let i = 0; i < puffCount; i++) {
       const puff = document.createElement("span");
@@ -294,7 +346,7 @@ export default function Sidebar() {
 
   // Mythic smoke
   useEffect(() => {
-    if (!mythic) {
+    if (!mythic || !allowFx) {
       clearSmoke();
       return;
     }
@@ -309,18 +361,15 @@ export default function Sidebar() {
       const center = getActiveCenter();
       if (!center) return;
       spawnSmoke(center.x, center.y, 0.75);
-    }, 240);
+    }, 900);
 
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mythic, location.pathname]);
+  }, [mythic, allowFx, location.pathname]);
 
   // Fetch streak
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("access_token");
+    const token = getAuthToken();
 
     if (!token) return;
 
@@ -354,6 +403,8 @@ export default function Sidebar() {
       ref={sbRef as any}
       className={[
         "sb",
+        isMobile ? "sb--mobile" : "",
+        isMobile && mobileOpen ? "sb--mobileOpen" : "",
         collapsed ? "sb--collapsed" : "",
         mythic ? "sb--mythic" : "",
         hasActive ? "sb--active" : "",
@@ -369,10 +420,17 @@ export default function Sidebar() {
         <button
           type="button"
           className="sb__toggle"
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => {
+            if (isMobile) {
+              if (mobileOpen) onRequestClose?.();
+              // If the drawer is controlled by parent, this button acts as "close" on mobile.
+              return;
+            }
+            setCollapsed((v) => !v);
+          }}
           aria-label="Toggle sidebar"
         >
-          ☰
+          {isMobile ? "✕" : "☰"}
         </button>
 
         <div className="sb__brand">
@@ -392,7 +450,14 @@ export default function Sidebar() {
           type="button"
           className={`sb__mythicBtn ${mythic ? "is-on" : ""}`}
           onClick={() => setMythic((v) => !v)}
-          title={mythic ? "Tắt Hoá Thần" : "Bật Hoá Thần"}
+          disabled={!allowFx}
+          title={
+            !allowFx
+              ? "Hiệu ứng được tắt trên mobile / chế độ giảm chuyển động"
+              : mythic
+              ? "Tắt Hoá Thần"
+              : "Bật Hoá Thần"
+          }
           aria-label="Toggle mythic mode"
           aria-pressed={mythic}
         >
@@ -418,7 +483,7 @@ export default function Sidebar() {
                 title={item.label}
                 aria-current={active ? "page" : undefined}
                 onMouseEnter={(e) => {
-                  if (!mythic) return;
+                  if (!mythic || !allowFx) return;
                   const sb = sbRef.current;
                   if (!sb) return;
 
@@ -448,7 +513,7 @@ export default function Sidebar() {
     title="Chat"
     aria-current={isActive("/chat") ? "page" : undefined}
     onMouseEnter={(e) => {
-      if (!mythic) return;
+      if (!mythic || !allowFx) return;
       const sb = sbRef.current;
       if (!sb) return;
 
