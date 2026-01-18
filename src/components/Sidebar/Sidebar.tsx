@@ -214,12 +214,6 @@ export default function Sidebar() {
 
   const isActive = (path: string) => activePath === path;
 
-  const groupChatActive = useMemo(
-    () => NAV_CHAT.some((i) => i.to === activePath),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activePath]
-  );
-
   const groupCenterActive = useMemo(
     () => NAV_CENTER.some((i) => i.to === activePath),
     // eslint-disable-next-line react-hooks/exhaustive-deps

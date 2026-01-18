@@ -6,6 +6,13 @@ type ServerToClientEvents = {
   "chat:typing": (payload: { conversationId: string; userId: string; isTyping: boolean }) => void;
   "chat:update": (payload: any) => void;
 
+  // ✅ add these to match Chat.tsx listeners
+  "chat:conversation_added": (payload: any) => void;
+  "chat:conversation_updated": (payload: any) => void;
+  "chat:members_updated": (payload: any) => void;
+  "chat:conversation_removed": (payload: any) => void;
+  "chat:conversation_deleted": (payload: any) => void;
+
   "presence:snapshot": (payload: { userIds: string[] }) => void;
   "presence:update": (payload: { userId: string; online: boolean }) => void;
 
@@ -14,6 +21,7 @@ type ServerToClientEvents = {
   "room:delete": (payload: any) => void;
   "room:invited": (payload: any) => void;
 };
+
 
 type ClientToServerEvents = {
   "chat:join": (payload: { conversationId: string }) => void;

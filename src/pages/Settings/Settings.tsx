@@ -10,11 +10,6 @@ export default function Settings() {
     setS(getAppSettings());
   }, []);
 
-  const toggle = (key: keyof typeof s) => {
-    const next = updateAppSettings({ [key]: !(s as any)[key] } as any);
-    setS(next);
-  };
-
   return (
     <div className="st-page">
       <div className="st-shell">

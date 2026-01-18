@@ -12,13 +12,12 @@ export default function Learn() {
   const [viText, setViText] = useState("");
   const [chars, setChars] = useState<CharItem[]>([]);
   const [zhText, setZhText] = useState("");
-  const [pinyin, setPinyin] = useState("");
   const [spoken, setSpoken] = useState("");
   const [score, setScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const [speed, setSpeed] = useState(1);
+  const speed = 1;
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
 
@@ -60,7 +59,6 @@ export default function Learn() {
     try {
       const res = await api.post("/translate", { text: clean });
       setZhText(res.data.zh);
-      setPinyin(res.data.pinyin);
 
       // ✅ reset timer khi có câu mới
       sentenceStartRef.current = Date.now();
@@ -164,6 +162,10 @@ export default function Learn() {
   return (
     <div className="learn-page">
       <h1>📘 Học tiếng Trung</h1>
+
+      <p>
+        XP: {xp} | Level: {level}
+      </p>
 
       <textarea
         className="input-vi"
