@@ -1,0 +1,15 @@
+.dashboard-main {
+  width: 100%;
+  padding: 40px 32px;
+}
+
+.dashboard-section {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.dashboard-study-card {
+  width: 100%;
+  max-width: 520px;
+}

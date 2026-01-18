@@ -1,0 +1,422 @@
+/* ========= Page ========= */
+.act-page{
+  width:100%;
+  padding: 28px 32px;
+  position: relative;
+}
+
+/* nền lava + embers (nhẹ, không lag) */
+.act-page::before{
+  content:"";
+  position: fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  opacity:.62;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(255, 120, 0, 0.18), transparent 40%),
+    radial-gradient(circle at 86% 10%, rgba(255, 220, 120, 0.12), transparent 42%),
+    radial-gradient(circle at 65% 78%, rgba(255, 60, 60, 0.10), transparent 44%),
+    radial-gradient(circle at 18% 86%, rgba(255, 160, 0, 0.10), transparent 46%);
+  filter: blur(10px);
+}
+.act-page::after{
+  content:"";
+  position: fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background-image:
+    radial-gradient(circle, rgba(255, 210, 120, 0.28) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(255, 120, 0, 0.22) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(255, 70, 70, 0.18) 0 1px, transparent 2px);
+  background-size: 120px 120px, 170px 170px, 260px 260px;
+  background-position: 0 0, 40px 70px, 120px 30px;
+  opacity: .32;
+  animation: actEmberMove 10s linear infinite;
+}
+
+.act-header,
+.act-loading,
+.act-error,
+.act-empty,
+.act-grid{
+  position: relative;
+  z-index:1;
+}
+
+/* ========= Header ========= */
+.act-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.act-titleWrap{ min-width:0; }
+
+.act-title{
+  margin: 0;
+  font-size: 28px;
+  font-weight: 1000;
+  letter-spacing: .01em;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  color: #0f172a;
+}
+
+.act-icon{
+  filter: drop-shadow(0 10px 22px rgba(255, 120, 0, 0.18));
+}
+
+.act-glowDot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 90, 0, 1), rgba(255, 220, 120, .7));
+  box-shadow: 0 0 24px rgba(255, 120, 0, 0.55);
+  animation: actPulse 1.35s ease-in-out infinite;
+  margin-left: 6px;
+}
+
+.act-sub{
+  margin-top: 8px;
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  flex-wrap: wrap;
+  opacity: .9;
+}
+
+.act-subPill{
+  display:inline-flex;
+  align-items:center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(229,231,235,.95);
+  box-shadow: 0 14px 30px rgba(15,23,42,.08);
+}
+
+.act-updated{
+  font-size: 13px;
+  opacity: .85;
+}
+
+/* ========= Buttons ========= */
+.act-actions{ display:flex; align-items:center; gap: 10px; }
+
+.act-refresh{
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,.95);
+  border: 1px solid rgba(229,231,235,.95);
+  cursor: pointer;
+  font-weight: 900;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  box-shadow: 0 16px 34px rgba(15,23,42,.10);
+}
+.act-refresh:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 120, 0, .45);
+  box-shadow: 0 22px 50px rgba(15,23,42,.14);
+}
+.act-refresh:disabled{
+  opacity: .6;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow: 0 16px 34px rgba(15,23,42,.08);
+}
+
+.act-refresh.ghost{
+  background: transparent;
+}
+
+.spin{ display:inline-block; animation: actSpin .9s linear infinite; }
+
+/* ========= Grid ========= */
+.act-grid{
+  margin-top: 16px;
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+/* ========= Card ========= */
+.act-card{
+  position: relative;
+  overflow:hidden;
+  border-radius: 22px;
+  background: rgba(255,255,255,.94);
+  border: 1px solid rgba(229,231,235,.95);
+  box-shadow: 0 18px 44px rgba(15,23,42,.12);
+  padding: 14px;
+  transform: translateZ(0);
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}
+.act-card:hover{
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 28px 64px rgba(15,23,42,.18);
+  border-color: rgba(255,120,0,.40);
+}
+
+.act-cardGlow{
+  position:absolute;
+  inset:-2px;
+  border-radius: 24px;
+  background: conic-gradient(
+    from 180deg,
+    rgba(255,60,60,0),
+    rgba(255,120,0,.85),
+    rgba(255,220,120,.75),
+    rgba(255,120,0,.85),
+    rgba(255,60,60,0)
+  );
+  filter: blur(14px);
+  opacity: 0;
+  transition: opacity .18s ease;
+  pointer-events:none;
+}
+.act-card:hover .act-cardGlow{ opacity: 1; }
+
+.act-cardTop{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+}
+
+.act-avatar{
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  display:grid;
+  place-items:center;
+  font-weight: 1000;
+  border: 1px solid rgba(229,231,235,.95);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(99,102,241,0.20), rgba(255,255,255,1)),
+    radial-gradient(circle at 40% 120%, rgba(255,90,0,0.14), transparent 50%);
+  position: relative;
+  box-shadow: 0 12px 28px rgba(15,23,42,.10);
+}
+
+.act-flame{
+  position:absolute;
+  right: -10px;
+  bottom: -12px;
+  font-size: 20px;
+  filter: drop-shadow(0 0 14px rgba(255, 120, 0, 0.65));
+  animation: actFlicker .7s ease-in-out infinite;
+}
+
+.act-user{ flex:1; min-width:0; }
+.act-nameRow{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width:0;
+}
+.act-name{
+  font-weight: 1000;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow:hidden;
+  text-overflow: ellipsis;
+}
+.act-email{
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: .72;
+  white-space: nowrap;
+  overflow:hidden;
+  text-overflow: ellipsis;
+}
+
+.act-minBadge{
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  border: 1px solid rgba(229,231,235,.95);
+  background: rgba(245,245,245,.85);
+  white-space: nowrap;
+}
+.act-minBadge.on{
+  background: rgba(232,255,241,.92);
+  border-color: rgba(34,197,94,.22);
+}
+.act-minIcon{ margin-right: 6px; }
+
+/* ========= Heat badge ========= */
+.act-heatBadge{
+  font-size: 12px;
+  font-weight: 1000;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(229,231,235,.95);
+  background: rgba(255,255,255,.86);
+  white-space: nowrap;
+}
+.act-heatBadge.cool{ opacity:.85; }
+.act-heatBadge.hot1{
+  border-color: rgba(255,120,0,.30);
+  background: rgba(255,120,0,.10);
+}
+.act-heatBadge.hot2{
+  border-color: rgba(255,120,0,.40);
+  background: rgba(255,120,0,.14);
+  box-shadow: 0 12px 30px rgba(255,120,0,.14);
+}
+.act-heatBadge.hot3{
+  border-color: rgba(255,60,60,.45);
+  background: rgba(255,60,60,.14);
+  box-shadow: 0 18px 44px rgba(255,120,0,.18);
+  animation: actPulse 1.2s ease-in-out infinite;
+}
+
+/* ========= Progress ========= */
+.act-progress{ margin-top: 12px; }
+.act-bar{
+  height: 12px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid rgba(229,231,235,.95);
+  overflow:hidden;
+  position: relative;
+}
+.act-barFill{
+  height: 100%;
+  width: 0%;
+  transition: width .45s ease;
+  background: linear-gradient(90deg, #ff3d3d, #ff7a00, #ffd000);
+  box-shadow: 0 0 26px rgba(255,120,0,.35);
+  animation: actFireFlow 1.0s linear infinite;
+}
+.act-barGlow{
+  position:absolute;
+  top:-12px;
+  bottom:-12px;
+  width: 110px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+  animation: actBarGlow 1.5s ease-in-out infinite;
+  pointer-events:none;
+}
+
+.act-progressText{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: .78;
+}
+
+/* ========= Stat boxes ========= */
+.act-stats{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.act-box{
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(250,250,250,.92);
+  border: 1px solid rgba(229,231,235,.85);
+  box-shadow: 0 12px 26px rgba(15,23,42,.06);
+}
+.act-boxTitle{ font-size: 12px; opacity:.75; font-weight: 900; letter-spacing: .02em; }
+.act-boxValue{ margin-top: 6px; font-size: 18px; font-weight: 1000; }
+.act-boxMeta{ margin-top: 6px; font-size: 12px; display:flex; gap: 12px; }
+.act-boxMeta .ok{ color: #16a34a; font-weight: 900; }
+.act-boxMeta .bad{ color: #dc2626; font-weight: 900; }
+
+.act-footnote{
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: .72;
+}
+
+/* ========= States ========= */
+.act-empty,
+.act-error{
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(229,231,235,.95);
+  box-shadow: 0 18px 44px rgba(15,23,42,.10);
+}
+.act-emptyTitle,
+.act-errorTitle{
+  font-weight: 1000;
+  font-size: 16px;
+}
+.act-emptySub{ margin-top: 6px; opacity:.78; }
+.act-errorMsg{ margin-top: 6px; opacity:.85; }
+
+/* ========= Skeleton ========= */
+.act-loading{ margin-top: 16px; }
+.act-skeletonHeader{
+  height: 16px;
+  width: 280px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f1f5f9, #ffffff, #f1f5f9);
+  background-size: 200% 100%;
+  animation: actShimmer 1.2s ease-in-out infinite;
+  border: 1px solid rgba(229,231,235,.95);
+}
+.act-skeletonGrid{
+  margin-top: 14px;
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.act-skeletonCard{
+  height: 170px;
+  border-radius: 22px;
+  background: linear-gradient(90deg, #f1f5f9, #ffffff, #f1f5f9);
+  background-size: 200% 100%;
+  animation: actShimmer 1.2s ease-in-out infinite;
+  border: 1px solid rgba(229,231,235,.95);
+  box-shadow: 0 18px 44px rgba(15,23,42,.08);
+}
+
+/* ========= Animations ========= */
+@keyframes actPulse{
+  0%{ transform: scale(1); opacity:.85; }
+  50%{ transform: scale(1.15); opacity:1; }
+  100%{ transform: scale(1); opacity:.85; }
+}
+@keyframes actFlicker{
+  0%{ transform: rotate(-4deg) scale(1); filter: drop-shadow(0 0 10px rgba(255,120,0,.45)); }
+  50%{ transform: rotate(4deg) scale(1.14); filter: drop-shadow(0 0 26px rgba(255,120,0,.78)); }
+  100%{ transform: rotate(-4deg) scale(1); filter: drop-shadow(0 0 10px rgba(255,120,0,.45)); }
+}
+@keyframes actFireFlow{
+  0%{ filter: hue-rotate(0deg); }
+  100%{ filter: hue-rotate(30deg); }
+}
+@keyframes actBarGlow{
+  0%{ transform: translateX(-90%); opacity: 0; }
+  25%{ opacity:.55; }
+  100%{ transform: translateX(170%); opacity: 0; }
+}
+@keyframes actEmberMove{
+  0%{ transform: translateY(0px); }
+  100%{ transform: translateY(-180px); }
+}
+@keyframes actShimmer{
+  0%{ background-position: 0% 0%; }
+  100%{ background-position: 200% 0%; }
+}
+@keyframes actSpin{
+  0%{ transform: rotate(0deg); }
+  100%{ transform: rotate(360deg); }
+}
+
+/* ========= Responsive ========= */
+@media (max-width: 980px){
+  .act-page{ padding: 18px 16px; }
+  .act-header{ flex-direction: column; align-items: stretch; }
+  .act-actions{ justify-content: flex-end; }
+}

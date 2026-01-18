@@ -1,0 +1,805 @@
+/* ============================
+   VocabBook - Warm / Glass VIP
+   Đồng bộ vibe Friends/Lessons
+   ============================ */
+
+.vb-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 22px 18px 40px;
+  position: relative;
+}
+
+/* nền warm + dust như Friends */
+.vb-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(255, 120, 0, 0.16), transparent 40%),
+    radial-gradient(circle at 82% 18%, rgba(255, 220, 120, 0.12), transparent 44%),
+    radial-gradient(circle at 62% 78%, rgba(255, 70, 70, 0.10), transparent 48%),
+    radial-gradient(circle at 16% 84%, rgba(99, 102, 241, 0.08), transparent 48%);
+  filter: blur(12px);
+}
+
+.vb-page::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.22;
+  background-image:
+    radial-gradient(circle, rgba(255, 210, 120, 0.34) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(255, 120, 0, 0.26) 0 1px, transparent 2px),
+    radial-gradient(circle, rgba(99, 102, 241, 0.22) 0 1px, transparent 2px);
+  background-size: 120px 120px, 170px 170px, 260px 260px;
+  background-position: 0 0, 55px 80px, 140px 30px;
+  animation: vbDust 10s linear infinite;
+}
+
+@keyframes vbDust {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-180px); }
+}
+
+/* đưa content lên trên nền */
+.vb-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================
+   Header (glass card)
+   ============================ */
+.vb-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(229, 231, 235, 0.85);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+}
+
+.vb-header h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 1000;
+  letter-spacing: -0.2px;
+  color: #0f172a;
+}
+
+.vb-sub {
+  margin: 6px 0 0;
+  color: rgba(15, 23, 42, 0.68);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.vb-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* buttons */
+.vb-add-new {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  font-weight: 1000;
+  color: #0f172a;
+
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+}
+
+.vb-add-new:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+  filter: saturate(1.05);
+}
+.vb-add-new:active { transform: translateY(0px); }
+
+/* count badge -> warm/dark glass */
+.vb-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-weight: 1000;
+
+  color: #0f172a;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.12),
+    rgba(255, 180, 80, 0.14),
+    rgba(99, 102, 241, 0.10)
+  );
+  border: 1px solid rgba(255, 140, 0, 0.22);
+  box-shadow: 0 14px 34px rgba(255, 120, 0, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.vb-count-num {
+  font-size: 20px;
+}
+
+.vb-count-text {
+  opacity: 0.80;
+  font-size: 12px;
+}
+
+/* ============================
+   Controls (search + chips)
+   ============================ */
+.vb-controls {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+
+  padding: 14px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(229, 231, 235, 0.88);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+  overflow: hidden;
+  position: relative;
+}
+
+.vb-controls::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity: 0.85;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 120, 0, 0.12), transparent 45%),
+    radial-gradient(circle at 80% 10%, rgba(255, 220, 120, 0.10), transparent 55%),
+    radial-gradient(circle at 30% 100%, rgba(99, 102, 241, 0.08), transparent 55%);
+}
+
+.vb-controls > *{
+  position: relative;
+  z-index: 1;
+}
+
+.vb-search {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  outline: none;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.vb-search:focus {
+  border-color: rgba(255, 140, 0, 0.45);
+  box-shadow: 0 0 0 4px rgba(255, 140, 0, 0.14), 0 12px 28px rgba(15, 23, 42, 0.10);
+}
+
+.vb-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.vb-chip {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  font-weight: 1000;
+  color: #0f172a;
+  backdrop-filter: blur(10px);
+
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.vb-chip:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+}
+
+.vb-chip.active {
+  color: #0f172a;
+  border-color: rgba(255, 140, 0, 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.12),
+    rgba(255, 180, 80, 0.14),
+    rgba(99, 102, 241, 0.10)
+  );
+  box-shadow: 0 18px 42px rgba(255, 120, 0, 0.14);
+}
+
+/* ============================
+   Main grid
+   ============================ */
+.vb-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .vb-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================
+   List (left)
+   ============================ */
+.vb-list {
+  border-radius: 18px;
+  overflow: hidden;
+
+  border: 1px solid rgba(229, 231, 235, 0.88);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+  position: relative;
+}
+
+.vb-list::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity: 0.55;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 120, 0, 0.10), transparent 45%),
+    radial-gradient(circle at 80% 10%, rgba(255, 220, 120, 0.08), transparent 55%),
+    radial-gradient(circle at 30% 100%, rgba(99, 102, 241, 0.07), transparent 55%);
+}
+
+.vb-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px;
+  border-top: 1px solid rgba(241, 245, 249, 0.9);
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.vb-item:first-child { border-top: 0; }
+
+.vb-item:hover {
+  background: rgba(255, 255, 255, 0.60);
+  transform: translateY(-1px);
+}
+
+.vb-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.10),
+    rgba(255, 180, 80, 0.12),
+    rgba(99, 102, 241, 0.08)
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 0, 0.18);
+}
+
+.vb-main { min-width: 0; }
+
+.vb-zh {
+  font-size: 26px;
+  font-weight: 1000;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.vb-subline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-weight: 900;
+}
+
+.vb-py { color: rgba(15, 23, 42, 0.80); }
+.vb-vi { color: rgba(15, 23, 42, 0.55); }
+
+.vb-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Button +Học */
+.vb-add {
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  font-weight: 1000;
+  cursor: pointer;
+  color: #0f172a;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  backdrop-filter: blur(10px);
+}
+.vb-add:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+}
+.vb-add.on {
+  color: #0f172a;
+  border-color: rgba(255, 140, 0, 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.12),
+    rgba(255, 180, 80, 0.14),
+    rgba(99, 102, 241, 0.10)
+  );
+  box-shadow: 0 18px 42px rgba(255, 120, 0, 0.12);
+}
+
+/* Loading/end */
+.vb-loading,
+.vb-end {
+  padding: 12px;
+  text-align: center;
+  color: rgba(15, 23, 42, 0.60);
+  font-weight: 900;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================
+   Panel (right) sticky glass
+   ============================ */
+.vb-panel {
+  border-radius: 18px;
+  padding: 14px;
+
+  border: 1px solid rgba(229, 231, 235, 0.88);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+
+  height: fit-content;
+  position: sticky;
+  top: 14px;
+  overflow: hidden;
+}
+
+.vb-panel::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity: 0.55;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 120, 0, 0.10), transparent 45%),
+    radial-gradient(circle at 80% 10%, rgba(255, 220, 120, 0.08), transparent 55%),
+    radial-gradient(circle at 30% 100%, rgba(99, 102, 241, 0.07), transparent 55%);
+}
+
+.vb-panel > *{ position: relative; z-index: 1; }
+
+.vb-panel-empty {
+  color: rgba(15, 23, 42, 0.62);
+  font-weight: 900;
+}
+
+.vb-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vb-panel-zh {
+  font-size: 40px;
+  font-weight: 1000;
+  color: #0f172a;
+}
+
+.vb-panel-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px dashed rgba(229, 231, 235, 0.95);
+}
+
+.vb-label {
+  color: rgba(15, 23, 42, 0.55);
+  font-weight: 1000;
+}
+
+.vb-value {
+  color: #0f172a;
+  font-weight: 1000;
+}
+
+.vb-progress {
+  margin-top: 12px;
+  border-top: 1px dashed rgba(229, 231, 235, 0.95);
+  padding-top: 12px;
+}
+
+.vb-progress-title {
+  font-weight: 1000;
+  margin-bottom: 8px;
+  color: rgba(15, 23, 42, 0.85);
+}
+
+.vb-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.vb-mini {
+  color: rgba(15, 23, 42, 0.55);
+  font-weight: 1000;
+  font-size: 12px;
+}
+
+.vb-big {
+  font-weight: 1000;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+/* actions buttons right */
+.vb-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.vb-btn {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  font-weight: 1000;
+  cursor: pointer;
+  color: #0f172a;
+  backdrop-filter: blur(10px);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.vb-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+}
+
+.vb-btn.primary {
+  border-color: rgba(99, 102, 241, 0.28);
+  background: rgba(99, 102, 241, 0.10);
+}
+
+.vb-btn.primary:hover{
+  border-color: rgba(255, 140, 0, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.10),
+    rgba(255, 180, 80, 0.12),
+    rgba(99, 102, 241, 0.10)
+  );
+}
+
+.vb-btn.ghost {
+  border-color: rgba(15, 23, 42, 0.10);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+/* monospace helper */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+/* ============================
+   Badges (status)
+   giữ màu logic nhưng dịu + glass
+   ============================ */
+.vb-badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-weight: 1000;
+  border: 1px solid;
+  font-size: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.vb-badge.big { font-size: 12px; }
+
+.vb-badge.new {
+  background: rgba(243, 244, 246, 0.75);
+  border-color: rgba(229, 231, 235, 0.95);
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.vb-badge.learning {
+  background: rgba(238, 242, 255, 0.78);
+  border-color: rgba(199, 210, 254, 0.95);
+  color: #3730a3;
+}
+
+.vb-badge.due {
+  background: rgba(255, 247, 237, 0.82);
+  border-color: rgba(254, 215, 170, 0.95);
+  color: #9a3412;
+}
+
+.vb-badge.weak {
+  background: rgba(254, 242, 242, 0.82);
+  border-color: rgba(254, 202, 202, 0.95);
+  color: #991b1b;
+}
+
+.vb-badge.mastered {
+  background: rgba(236, 253, 245, 0.82);
+  border-color: rgba(167, 243, 208, 0.95);
+  color: #065f46;
+}
+
+/* ============================
+   MODAL (glass + blur)
+   ============================ */
+.vb-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 50;
+  backdrop-filter: blur(6px);
+}
+
+.vb-modal {
+  width: min(520px, 100%);
+  border-radius: 18px;
+  overflow: hidden;
+
+  border: 1px solid rgba(229, 231, 235, 0.88);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.28);
+}
+
+.vb-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+}
+
+.vb-modal-title {
+  font-weight: 1000;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.vb-modal-x {
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 1000;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.vb-modal-x:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.vb-modal-body {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+/* Fields */
+.vb-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.vb-field span {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.60);
+  font-weight: 1000;
+}
+
+.vb-field input {
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  outline: none;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.vb-field input:focus {
+  border-color: rgba(255, 140, 0, 0.45);
+  box-shadow: 0 0 0 4px rgba(255, 140, 0, 0.14);
+}
+
+.vb-modal-note {
+  color: rgba(15, 23, 42, 0.62);
+  font-weight: 900;
+  font-size: 12px;
+  background: rgba(248, 250, 252, 0.80);
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.vb-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Tabs */
+.vb-tabs {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+}
+
+.vb-tab {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  font-weight: 1000;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.vb-tab:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+}
+
+.vb-tab.active {
+  color: #0f172a;
+  border-color: rgba(255, 140, 0, 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 60, 60, 0.12),
+    rgba(255, 180, 80, 0.14),
+    rgba(99, 102, 241, 0.10)
+  );
+}
+
+/* Paste mode */
+.vb-paste-help {
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.vb-paste-title {
+  font-weight: 1000;
+  margin-bottom: 6px;
+  color: rgba(15, 23, 42, 0.86);
+}
+
+.vb-code {
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.vb-paste-note {
+  margin-top: 6px;
+  color: rgba(15, 23, 42, 0.60);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.vb-paste-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 1000;
+  color: #0f172a;
+}
+
+.vb-delim {
+  width: 80px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.92);
+  outline: none;
+}
+
+.vb-textarea {
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  outline: none;
+  font-weight: 900;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.vb-textarea:focus {
+  border-color: rgba(255, 140, 0, 0.45);
+  box-shadow: 0 0 0 4px rgba(255, 140, 0, 0.14);
+}
+
+.vb-report {
+  background: rgba(236, 253, 245, 0.88);
+  border: 1px solid rgba(167, 243, 208, 0.95);
+  color: #065f46;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 1000;
+  font-size: 12px;
+}
+
+.vb-report-err {
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px dashed rgba(167, 243, 208, 0.95);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: #065f46;
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .vb-page::after { animation: none !important; }
+  .vb-chip, .vb-add-new, .vb-item, .vb-add, .vb-btn, .vb-tab, .vb-modal-x {
+    transition: none !important;
+  }
+}

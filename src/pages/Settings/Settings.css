@@ -1,0 +1,195 @@
+.st-page {
+  min-height: calc(100vh - 20px);
+  padding: 22px;
+}
+
+.st-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.st-hero {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(15, 27, 51, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.st-heroIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(124, 92, 255, 0.18);
+  border: 1px solid rgba(124, 92, 255, 0.25);
+  font-size: 20px;
+}
+
+.st-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  color: #eaf0ff;
+}
+
+.st-sub {
+  margin: 4px 0 0;
+  opacity: 0.7;
+  color: #eaf0ff;
+}
+
+.st-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 980px) {
+  .st-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.st-card {
+  padding: 16px 16px;
+  border-radius: 18px;
+  background: rgba(15, 27, 51, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.st-cardTitle {
+  font-weight: 900;
+  color: #eaf0ff;
+  margin-bottom: 12px;
+}
+
+.st-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.st-row:first-of-type {
+  border-top: none;
+}
+
+.st-rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.st-rowLabel {
+  color: #eaf0ff;
+  font-weight: 800;
+}
+
+.st-rowHint {
+  color: rgba(234, 240, 255, 0.7);
+  font-size: 13px;
+}
+
+.st-switch {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+  cursor: pointer;
+}
+
+.st-switch span {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(234, 240, 255, 0.85);
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  transition: all 180ms ease;
+}
+
+.st-switch.on {
+  background: rgba(124, 92, 255, 0.35);
+  border-color: rgba(124, 92, 255, 0.45);
+}
+
+.st-switch.on span {
+  left: 21px;
+  background: #ffffff;
+}
+
+.st-quiet {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.st-quietRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.st-quietLabel {
+  color: rgba(234, 240, 255, 0.75);
+  font-weight: 800;
+}
+
+.st-quiet input[type="time"] {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #eaf0ff;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.st-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+}
+
+.st-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf0ff;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.st-btn.primary {
+  background: rgba(124, 92, 255, 0.35);
+  border-color: rgba(124, 92, 255, 0.45);
+}
+
+.st-sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.st-sliderRow input[type="range"] {
+  width: 100%;
+}
+
+.st-sliderValue {
+  font-weight: 900;
+  color: #eaf0ff;
+  min-width: 54px;
+  text-align: right;
+}
