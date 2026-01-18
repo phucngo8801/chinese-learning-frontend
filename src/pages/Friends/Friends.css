@@ -392,3 +392,20 @@
     white-space: normal;
   }
 }
+
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .friends-page {
+    padding: 16px 12px;
+  }
+
+  .friends-page::before,
+  .friends-page::after,
+  .fr-card::before,
+  .fr-card::after {
+    display: none;
+  }
+
+  .fr-head {
+    gap: 10px;
+  }
+}

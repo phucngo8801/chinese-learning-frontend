@@ -1,38 +1,51 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar/Sidebar";
 import "./AppLayout.css";
 
-import { useEffect, useState } from "react";
-
 export default function AppLayout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Lock body scroll when the drawer is open (mobile).
+  const isMobile = useMemo(() => {
+    // SSR-safe (Vite is client-side, but keep it defensive)
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
+  }, []);
+
+  // Close the sidebar when navigating on mobile
   useEffect(() => {
-    if (!mobileOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [mobileOpen]);
+    if (!isMobile) return;
+    setMobileSidebarOpen(false);
+  }, [location.pathname, isMobile]);
 
   return (
     <div className="app-layout">
-      <Sidebar mobileOpen={mobileOpen} onRequestClose={() => setMobileOpen(false)} />
-      {mobileOpen && <div className="app-overlay" onClick={() => setMobileOpen(false)} />}
+      {/* Mobile hamburger */}
+      <button
+        className="mobile-nav-btn"
+        type="button"
+        aria-label="Open menu"
+        onClick={() => setMobileSidebarOpen(true)}
+      >
+        ☰
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileSidebarOpen && (
+        <button
+          className="mobile-nav-overlay"
+          type="button"
+          aria-label="Close menu"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      <Sidebar
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
       <div className="app-content">
-        <header className="app-mobile-header">
-          <button
-            type="button"
-            className="app-mobile-menu"
-            aria-label="Open menu"
-            onClick={() => setMobileOpen(true)}
-          >
-            ☰
-          </button>
-          <div className="app-mobile-title">Học tiếng Trung</div>
-        </header>
         <Outlet />
       </div>
     </div>

@@ -677,3 +677,16 @@
   .lb-podiumSlot.podium-2,
   .lb-podiumSlot.podium-3 { transform: none; }
 }
+
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .lb-page { padding: 16px 12px; }
+  .lb-page::before,
+  .lb-page::after,
+  .lb-card::before,
+  .lb-card::after,
+  .lb-confetti {
+    display: none;
+  }
+  .lb-card { backdrop-filter: none; }
+  .lb-btn, .lb-chip, .lb-pill { transition: none !important; }
+}

@@ -401,3 +401,16 @@
     justify-content: flex-start;
   }
 }
+
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .noti-page {
+    padding: 16px 12px;
+  }
+  .noti-page::before,
+  .noti-page::after {
+    display: none;
+  }
+  .noti-card {
+    backdrop-filter: none;
+  }
+}

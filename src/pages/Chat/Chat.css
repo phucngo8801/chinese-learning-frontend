@@ -1268,3 +1268,36 @@
 .sys-pill a:hover {
   text-decoration: underline;
 }
+
+/* ===== Mobile layout ===== */
+@media (max-width: 768px){
+  .chat-page{
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .chat-sidebar{
+    border-radius: 18px;
+  }
+
+  .chat-main{
+    border-radius: 18px;
+    min-height: 60dvh;
+  }
+
+  .chat-list{
+    max-height: 34dvh;
+  }
+
+  .chat-messages{
+    max-height: 42dvh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .chat-page::before,
+  .chat-page::after{
+    display: none !important;
+  }
+}
