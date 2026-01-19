@@ -28,6 +28,13 @@ export type DailyStats = {
   byMode: Record<Mode, { correct: number; wrong: number; total: number }>;
 };
 
+export type PronAttempt = {
+  vocabId: number;
+  score: number;
+  transcript?: string; // ✅ accept
+  lastText?: string; // ✅ accept
+};
+
 /**
  * UID used to scope local storage.
  * - Set at login (email or userId).
@@ -115,32 +122,21 @@ export function setPronMap(map: PronMap) {
 }
 
 /**
- * ✅ Backward compatible export:
- * LearnVocab đang import savePronAttempt(...)
- *
- * Hỗ trợ 2 kiểu gọi:
- * 1) savePronAttempt(vocabId, score, lastText?)
- * 2) savePronAttempt({ vocabId, score, lastText })
+ * ✅ Backward compatible:
+ * - savePronAttempt(vocabId, score, lastText?)
+ * - savePronAttempt({ vocabId, score, transcript? / lastText? })
  */
-export function savePronAttempt(
-  vocabIdOrArgs:
-    | number
-    | {
-        vocabId: number;
-        score: number;
-        lastText?: string;
-      },
-  score?: number,
-  lastText?: string
-) {
-  const args =
+export function savePronAttempt(vocabIdOrArgs: number | PronAttempt, score?: number, lastText?: string): void {
+  const args: PronAttempt =
     typeof vocabIdOrArgs === "number"
       ? { vocabId: vocabIdOrArgs, score: Number(score ?? 0), lastText: lastText ?? "" }
-      : { vocabId: vocabIdOrArgs.vocabId, score: Number(vocabIdOrArgs.score ?? 0), lastText: vocabIdOrArgs.lastText ?? "" };
+      : vocabIdOrArgs;
 
   const vocabId = Number(args.vocabId);
   const s = Number.isFinite(args.score) ? args.score : 0;
-  const txt = (args.lastText ?? "").toString();
+
+  // ✅ accept both transcript + lastText
+  const txt = (args.transcript ?? args.lastText ?? "").toString();
 
   if (!Number.isFinite(vocabId)) return;
 
@@ -194,7 +190,10 @@ export function getDailyStats(): DailyStats {
     wrong: 0,
     total: 0,
     uniqueIds: [],
-    byMode: { random: { correct: 0, wrong: 0, total: 0 }, selected: { correct: 0, wrong: 0, total: 0 } },
+    byMode: {
+      random: { correct: 0, wrong: 0, total: 0 },
+      selected: { correct: 0, wrong: 0, total: 0 },
+    },
   });
 
   // reset if date changed
@@ -205,7 +204,10 @@ export function getDailyStats(): DailyStats {
       wrong: 0,
       total: 0,
       uniqueIds: [],
-      byMode: { random: { correct: 0, wrong: 0, total: 0 }, selected: { correct: 0, wrong: 0, total: 0 } },
+      byMode: {
+        random: { correct: 0, wrong: 0, total: 0 },
+        selected: { correct: 0, wrong: 0, total: 0 },
+      },
     };
   }
 
@@ -217,7 +219,10 @@ export function setDailyStats(stats: DailyStats) {
   localStorage.setItem(k, JSON.stringify(stats));
 }
 
-export function bumpDailyStats(args: { correct?: boolean; vocabId?: number; mode?: Mode }) {
+/**
+ * bumpDailyStats: always returns updated stats (NOT void)
+ */
+export function bumpDailyStats(args: { correct?: boolean; vocabId?: number; mode?: Mode }): DailyStats {
   const st = getDailyStats();
 
   const mode: Mode = args.mode || "random";
@@ -239,32 +244,25 @@ export function bumpDailyStats(args: { correct?: boolean; vocabId?: number; mode
   }
 
   setDailyStats(st);
+  return st;
 }
 
 /**
- * ✅ Backward compatible export:
- * LearnVocab đang import bumpDaily(...)
+ * ✅ Backward compatible:
+ * - bumpDaily(true/false, vocabId?, mode?)
+ * - bumpDaily({ correct, vocabId, mode })
  *
- * Hỗ trợ 2 kiểu gọi:
- * 1) bumpDaily(true/false, vocabId?, mode?)
- * 2) bumpDaily({ correct, vocabId, mode })
+ * RETURNS DailyStats (NOT void)
  */
 export function bumpDaily(
-  correctOrArgs:
-    | boolean
-    | {
-        correct?: boolean;
-        vocabId?: number;
-        mode?: Mode;
-      },
+  correctOrArgs: boolean | { correct?: boolean; vocabId?: number; mode?: Mode },
   vocabId?: number,
   mode?: Mode
-) {
+): DailyStats {
   if (typeof correctOrArgs === "boolean") {
-    bumpDailyStats({ correct: correctOrArgs, vocabId, mode });
-    return;
+    return bumpDailyStats({ correct: correctOrArgs, vocabId, mode });
   }
-  bumpDailyStats(correctOrArgs || {});
+  return bumpDailyStats(correctOrArgs || {});
 }
 
 /* ---------------- RESET ---------------- */
@@ -273,7 +271,6 @@ export function resetLocalLearning() {
   const uid = getLocalUid();
   const suffix = `::${uid}`;
 
-  // Note: localStorage iteration differs by browser; Object.keys(localStorage) works in modern browsers.
   for (const k of Object.keys(localStorage)) {
     if (k.endsWith(suffix)) localStorage.removeItem(k);
   }
