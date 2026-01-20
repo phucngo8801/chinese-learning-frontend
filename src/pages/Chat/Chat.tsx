@@ -3,7 +3,6 @@ import api from "../../api/axios";
 import toast from "../../lib/toast";
 import { useRealtime } from "../../components/realtime/RealtimeProvider";
 import { getSocket } from "../../lib/socket";
-import { getAuthToken } from "../../lib/authToken";
 import "./Chat.css";
 
 type UserMini = { id: string; name: string; email: string };
@@ -61,7 +60,12 @@ type MemberRow = {
 };
 
 function getToken() {
-  return getAuthToken();
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    ""
+  );
 }
 
 function decodeJwtPayload(token: string): any | null {

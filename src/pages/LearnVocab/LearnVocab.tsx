@@ -245,6 +245,9 @@ export default function LearnVocab() {
   >([]);
   const [extraTokens, setExtraTokens] = useState<string[]>([]);
 
+  // ✅ tránh spam ghi "đọc sai" nhiều lần cho cùng 1 từ
+  const pronWrongLoggedRef = useRef<boolean>(false);
+
   // ✅ khóa/mở nút “Đúng”
   const canPassPron = pronScore !== null && pronScore >= PASS_PRON_SCORE;
 
@@ -265,10 +268,21 @@ export default function LearnVocab() {
   // ✅ SpeechRecognition
   const recogRef = useRef<any>(null);
   const recTimerRef = useRef<number | null>(null);
+  const recogHasStartedRef = useRef<boolean>(false);
+  const recogStartedAtRef = useRef<number>(0);
   const latestTranscriptRef = useRef<string>("");
   const finalizedRef = useRef<boolean>(false);
   const isRecordingRef = useRef<boolean>(false);
   const [isRecording, setIsRecording] = useState(false);
+
+  // Fallback recorder (for browsers without SpeechRecognition: Safari/Firefox...)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const silenceSinceRef = useRef<number | null>(null);
+  const heardSpeechRef = useRef<boolean>(false);
 
   const setRecording = (v: boolean) => {
     isRecordingRef.current = v;
@@ -288,10 +302,93 @@ export default function LearnVocab() {
     setFlipped(false);
     setCompleted(false);
     resetPron();
+
+    pronWrongLoggedRef.current = false;
+  };
+
+  const pickAudioMimeType = () => {
+    const MR: any = (window as any).MediaRecorder;
+    const isSupported = (t: string) => MR?.isTypeSupported?.(t) === true;
+
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/mpeg",
+    ];
+
+    for (const t of candidates) {
+      if (isSupported(t)) return t;
+    }
+    return "";
+  };
+
+  const cleanupVad = () => {
+    try {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    } catch {}
+    rafRef.current = null;
+
+    try {
+      audioCtxRef.current?.close?.();
+    } catch {}
+    audioCtxRef.current = null;
+
+    silenceSinceRef.current = null;
+    heardSpeechRef.current = false;
+  };
+
+  const stopFallbackRecorder = (cancel: boolean) => {
+    cleanupVad();
+
+    const rec = mediaRecorderRef.current;
+    if (rec) {
+      if (cancel) {
+        try {
+          rec.ondataavailable = null;
+          rec.onstop = null;
+        } catch {}
+      }
+      try {
+        if (rec.state !== "inactive") rec.stop();
+      } catch {}
+    }
+
+    const stream = mediaStreamRef.current;
+    if (stream) {
+      try {
+        stream.getTracks().forEach((t) => t.stop());
+      } catch {}
+    }
+
+    mediaStreamRef.current = null;
+
+    if (cancel) audioChunksRef.current = [];
+  };
+
+  const transcribeAudio = async (blob: Blob) => {
+    const fd = new FormData();
+    // Add an extension so backend/provider can guess decoder more reliably
+    const ext = blob.type.includes("mp4")
+      ? "mp4"
+      : blob.type.includes("mpeg")
+      ? "mp3"
+      : "webm";
+    fd.append("file", blob, `speech.${ext}`);
+
+    const res = await api.post("/speech/transcribe", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    return {
+      text: (res.data?.text || "").toString(),
+      rawText: (res.data?.rawText || "").toString(),
+    };
   };
 
   // ✅ stop record sạch
-  const stopRecordSilently = () => {
+  const stopRecordSilently = (opts?: { cancel?: boolean }) => {
+    const cancel = opts?.cancel ?? false;
     try {
       if (recTimerRef.current) window.clearTimeout(recTimerRef.current);
       recTimerRef.current = null;
@@ -311,7 +408,15 @@ export default function LearnVocab() {
         } catch {}
       }
     } catch {}
+
+    // Stop fallback recorder (if any)
+    try {
+      stopFallbackRecorder(cancel);
+    } catch {}
+
     recogRef.current = null;
+    mediaRecorderRef.current = null;
+
     isRecordingRef.current = false;
     if (mountedRef.current) setIsRecording(false);
   };
@@ -320,7 +425,7 @@ export default function LearnVocab() {
     return () => {
       for (const id of timeoutsRef.current) window.clearTimeout(id);
       timeoutsRef.current = [];
-      stopRecordSilently();
+      stopRecordSilently({ cancel: true });
       try {
         speechSynthesis.cancel();
       } catch {}
@@ -478,12 +583,18 @@ export default function LearnVocab() {
     speechSynthesis.speak(u);
   };
 
-  const postResult = async (correct: boolean) => {
+  /**
+   * Ghi kết quả học.
+   * - Mặc định: durationSec = thời gian từ lúc load thẻ (>= 1)
+   * - Dùng override = 0 cho các event không muốn cộng phút/streak (vd: chấm phát âm sai)
+   */
+  const postResult = async (correct: boolean, durationSecOverride?: number) => {
     if (!vocab) return;
-    const durationSec = Math.max(
-      1,
-      Math.round((Date.now() - cardStartRef.current) / 1000)
-    );
+    const durationSec =
+      typeof durationSecOverride === "number"
+        ? Math.max(0, Math.round(durationSecOverride))
+        : Math.max(1, Math.round((Date.now() - cardStartRef.current) / 1000));
+
     await api.post("/vocab/result", { vocabId: vocab.id, correct, durationSec });
   };
 
@@ -627,6 +738,16 @@ export default function LearnVocab() {
 
       savePronAttempt({ vocabId: vocab.id, score, transcript });
 
+      // ✅ nếu phát âm (từ SpeechRecognition) không đạt, tính là "Sai" 1 lần
+      if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
+        pronWrongLoggedRef.current = true;
+        if (result !== "correct") setResult("wrong");
+        if (mountedRef.current)
+          setTodayStats(bumpDaily({ vocabId: vocab.id, correct: false, mode }));
+        // không cộng phút/streak
+        postResult(false, 0).catch(() => void 0);
+      }
+
       if (score >= PASS_PRON_SCORE) {
         safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa nút Đúng`);
       } else {
@@ -687,6 +808,16 @@ export default function LearnVocab() {
 
     savePronAttempt({ vocabId: vocab.id, score, transcript });
 
+    // ✅ nếu phát âm không đạt, tính là "Sai" 1 lần (không spam)
+    if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
+      pronWrongLoggedRef.current = true;
+      if (result !== "correct") setResult("wrong");
+      if (mountedRef.current)
+        setTodayStats(bumpDaily({ vocabId: vocab.id, correct: false, mode }));
+      // không cộng phút/streak
+      postResult(false, 0).catch(() => void 0);
+    }
+
     if (score >= PASS_PRON_SCORE) {
       safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa nút Đúng`);
     } else {
@@ -699,12 +830,143 @@ export default function LearnVocab() {
 
   // ✅ record: continuous + interim + debounce 1400ms
   const stopRecord = () => {
-    stopRecordSilently();
+    stopRecordSilently({ cancel: false });
   };
 
-  const record = () => {
+  const startFallbackRecord = async () => {
     if (!vocab) return;
 
+    const MR: any = (window as any).MediaRecorder;
+    if (!MR) {
+      safeToast(
+        toast.error,
+        "❌ Trình duyệt không hỗ trợ ghi âm (MediaRecorder). Hãy dùng Chrome/Edge hoặc bật tính năng ghi âm."
+      );
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      safeToast(toast.error, "❌ Trình duyệt không hỗ trợ microphone (getUserMedia)");
+      return;
+    }
+
+    latestTranscriptRef.current = "";
+    finalizedRef.current = false;
+    audioChunksRef.current = [];
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mimeType = pickAudioMimeType();
+      const recorder = new MR(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+
+      // simple voice activity detection to auto-stop when user is quiet
+      const AudioCtx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        try {
+          const ctx: AudioContext = new AudioCtx();
+          audioCtxRef.current = ctx;
+          const src = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 2048;
+          src.connect(analyser);
+
+          const buf = new Uint8Array(analyser.fftSize);
+          const threshold = 0.02;
+          const silenceMs = 1200;
+
+          const tick = () => {
+            if (!isRecordingRef.current) return;
+
+            analyser.getByteTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) {
+              const v = (buf[i] - 128) / 128;
+              sum += v * v;
+            }
+            const rms = Math.sqrt(sum / buf.length);
+
+            const now = Date.now();
+            if (rms > threshold) {
+              heardSpeechRef.current = true;
+              silenceSinceRef.current = null;
+            } else if (heardSpeechRef.current) {
+              if (silenceSinceRef.current == null) silenceSinceRef.current = now;
+              else if (now - silenceSinceRef.current > silenceMs) stopRecord();
+            }
+
+            rafRef.current = requestAnimationFrame(tick);
+          };
+
+          rafRef.current = requestAnimationFrame(tick);
+        } catch {
+          // ignore VAD errors
+        }
+      }
+
+      recorder.ondataavailable = (ev: any) => {
+        if (ev?.data && ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+
+      recorder.onstop = async () => {
+        try {
+          // If component already unmounted, skip work
+          if (!mountedRef.current) return;
+
+          const blob = new Blob(audioChunksRef.current, {
+            type: mimeType || "audio/webm",
+          });
+
+          // reset chunks now that we have the blob
+          audioChunksRef.current = [];
+
+          setPosting(true);
+
+          const { text, rawText } = await transcribeAudio(blob);
+          const finalText = (text || rawText || "").trim();
+
+          if (!finalText) {
+            safeToast(toast.error, "❌ Không nhận ra nội dung. Thử nói lại.");
+            return;
+          }
+
+          setSpokenText(finalText);
+          buildPronFeedback(finalText);
+          safeToast(toast, "📌 Xem chỗ sai ở khung chấm phát âm nhé!");
+        } catch (e: any) {
+          safeToast(
+            toast.error,
+            e?.response?.data?.message || "❌ Không thể chấm phát âm trên trình duyệt này (cần cấu hình /speech/transcribe)."
+          );
+        } finally {
+          setPosting(false);
+        }
+      };
+
+      setRecording(true);
+      safeToast(
+        toast.success,
+        "🎙️ Đang ghi âm... (trình duyệt không hỗ trợ nhận dạng trực tiếp, sẽ gửi lên server để chấm)"
+      );
+
+      recorder.start(250);
+
+      // safety: auto-stop after 12s to avoid stuck recording
+      safeTimeout(() => {
+        if (isRecordingRef.current) stopRecord();
+      }, 12000);
+    } catch {
+      stopRecordSilently({ cancel: true });
+      safeToast(toast.error, "❌ Không mở được micro. Hãy cấp quyền mic và thử lại.");
+    }
+  };
+
+  const record = async () => {
+    if (!vocab) return;
+
+    // toggle
     if (isRecordingRef.current) {
       stopRecord();
       return;
@@ -712,49 +974,74 @@ export default function LearnVocab() {
 
     const SR =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    // If no SpeechRecognition (Safari/Firefox...), fallback to MediaRecorder + server STT
     if (!SR) {
-      safeToast(toast.error, "❌ Trình duyệt không hỗ trợ SpeechRecognition");
+      await startFallbackRecord();
+      return;
+    }
+
+    // Ask mic permission explicitly (prevents instant not-allowed/audio-capture on some devices)
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    } catch {
+      safeToast(
+        toast.error,
+        "❌ Bạn cần cho phép Microphone để chấm phát âm (Settings > Site settings > Microphone)."
+      );
       return;
     }
 
     latestTranscriptRef.current = "";
     finalizedRef.current = false;
+    recogHasStartedRef.current = false;
+    recogStartedAtRef.current = Date.now();
 
     const recog = new SR();
     recogRef.current = recog;
 
+    // zh-CN: nhận dạng tiếng Trung
     recog.lang = "zh-CN";
-    recog.continuous = true;
+
+    // continuous=true hay bị stop/lỗi trên mobile; để false ổn định hơn
+    recog.continuous = false;
     recog.interimResults = true;
     recog.maxAlternatives = 5;
-
-    setRecording(true);
-    safeToast(toast.success, "🎙️ Đang nghe... nói xong bấm Dừng hoặc ngừng 1 chút để tự chấm");
 
     const finalizeNow = () => {
       if (!isRecordingRef.current) return;
       if (finalizedRef.current) return;
 
-      const text = (latestTranscriptRef.current || "").trim();
-      if (!text) {
-        safeToast(toast.error, "❌ Mình không nghe rõ, thử nói lại");
+      const t = (latestTranscriptRef.current || "").trim();
+      if (!t) {
+        safeToast(toast.error, "❌ Không nghe thấy giọng. Hãy thử nói gần micro hơn.");
         stopRecord();
         return;
       }
 
       finalizedRef.current = true;
-      if (mountedRef.current) buildPronFeedback(text);
+      if (mountedRef.current) buildPronFeedback(t);
       safeToast(toast, "📌 Xem chỗ sai ở khung chấm phát âm nhé!");
       stopRecord();
     };
 
-    const scheduleFinalize = () => {
+    const scheduleFinalize = (ms = 1400) => {
       if (!isRecordingRef.current) return;
       if (recTimerRef.current) window.clearTimeout(recTimerRef.current);
+      recTimerRef.current = window.setTimeout(() => finalizeNow(), ms);
+    };
 
-      recTimerRef.current = window.setTimeout(() => {
-        finalizeNow();
-      }, 1400);
+    recog.onstart = () => {
+      recogHasStartedRef.current = true;
+      recogStartedAtRef.current = Date.now();
+      setRecording(true);
+      safeToast(
+        toast.success,
+        "🎙️ Đang nghe... nói xong bấm Dừng hoặc ngừng 1 chút để tự chấm"
+      );
     };
 
     recog.onresult = (e: any) => {
@@ -779,21 +1066,67 @@ export default function LearnVocab() {
 
       if (finalText.trim()) {
         if (recTimerRef.current) window.clearTimeout(recTimerRef.current);
-        recTimerRef.current = window.setTimeout(() => finalizeNow(), 200);
+        recTimerRef.current = window.setTimeout(() => finalizeNow(), 150);
         return;
       }
 
-      scheduleFinalize();
+      scheduleFinalize(1400);
     };
 
-    recog.onerror = () => {
-      safeToast(toast.error, "❌ Lỗi khi nhận dạng giọng nói");
+    recog.onerror = (ev: any) => {
+      const code = ev?.error;
+      const startedAt = recogStartedAtRef.current || Date.now();
+      const elapsed = Date.now() - startedAt;
+
+      // no-speech can fire immediately on some devices (before user can talk)
+      if (code === "no-speech") {
+        if (elapsed < 1200) {
+          safeToast(
+            toast.error,
+            "⚠️ Hãy bấm 🎙️ rồi bắt đầu nói ngay (không để im lặng)."
+          );
+        } else {
+          safeToast(
+            toast.error,
+            "⚠️ Không nghe thấy giọng. Thử nói to hơn hoặc gần micro hơn."
+          );
+        }
+        stopRecord();
+        return;
+      }
+
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        safeToast(toast.error, "❌ Bạn chưa cho phép Microphone cho trang này.");
+        stopRecord();
+        return;
+      }
+
+      if (code === "audio-capture") {
+        safeToast(toast.error, "❌ Không tìm thấy microphone (hoặc đang bị app khác chiếm).");
+        stopRecord();
+        return;
+      }
+
+      if (code === "network") {
+        safeToast(toast.error, "❌ Lỗi mạng/engine nhận dạng. Thử lại sau.");
+        stopRecord();
+        return;
+      }
+
+      safeToast(toast.error, `❌ Lỗi nhận dạng giọng nói${code ? ": " + code : ""}`);
       stopRecord();
     };
 
     recog.onend = () => {
+      // If SR ended but we were recording and have something, try finalize
       if (isRecordingRef.current && !finalizedRef.current) {
-        scheduleFinalize();
+        // If SR ended right away before onstart, treat as failure
+        if (!recogHasStartedRef.current) {
+          safeToast(toast.error, "❌ Không thể bật micro. Hãy kiểm tra quyền Microphone.");
+          stopRecord();
+          return;
+        }
+        scheduleFinalize(300);
       }
     };
 
@@ -801,6 +1134,7 @@ export default function LearnVocab() {
       recog.start();
     } catch {
       stopRecord();
+      safeToast(toast.error, "❌ Không thể bắt đầu nhận dạng. Thử reload trang.");
     }
   };
 
@@ -1050,84 +1384,6 @@ export default function LearnVocab() {
               </div>
             </div>
 
-            {/* Pron */}
-            <div className="lv-pron">
-              <div className="lv-pron-head">
-                <div className="lv-pron-title">🎯 Chấm phát âm</div>
-                <div className="lv-pron-score">
-                  {pronScore === null ? "—" : `${pronScore}%`}
-                </div>
-              </div>
-
-              <div className="lv-pron-row">
-                <div className="lv-pron-label">Bạn nói</div>
-                <div className="lv-pron-text">{spokenText || "Chưa có"}</div>
-              </div>
-
-              <div className="lv-pron-row">
-                <div className="lv-pron-label">Đáp án</div>
-                <div className="lv-pron-tokens">
-                  {expectedTokensUI.length === 0 ? (
-                    <span className="lv-pron-muted">Bấm “Nói” để chấm</span>
-                  ) : (
-                    expectedTokensUI.map((t, idx) => (
-                      <span
-                        key={`${t.token}-${idx}`}
-                        className={`lv-pill ${t.status}`}
-                        title={
-                          t.status === "correct"
-                            ? "Đúng"
-                            : t.status === "missing"
-                            ? "Thiếu"
-                            : `Bạn nói: ${t.got || ""}`
-                        }
-                      >
-                        {t.token}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {extraTokens.length > 0 && (
-                <div className="lv-pron-row">
-                  <div className="lv-pron-label">Bạn nói dư</div>
-                  <div className="lv-pron-tokens">
-                    {extraTokens.map((x, i) => (
-                      <span key={`${x}-${i}`} className="lv-pill extra">
-                        {x}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {expectedTokensUI.some((t) => t.status !== "correct") && (
-                <div className="lv-pron-tips">
-                  <div className="lv-pron-tips-title">Gợi ý sửa</div>
-                  <ul>
-                    {expectedTokensUI
-                      .filter((t) => t.status !== "correct")
-                      .flatMap((t, idx) =>
-                        (t.tips || []).map((tip, j) => (
-                          <li key={`${idx}-${j}`}>
-                            <b className="mono">{t.token}</b>: {tip}
-                          </li>
-                        ))
-                      )}
-                  </ul>
-                </div>
-              )}
-
-              {/* ✅ Gợi ý khóa/mở nút “Đúng” */}
-              <div className="lv-pron-gate">
-                <span className={`lv-gate ${canPassPron ? "ok" : "lock"}`}>
-                  {canPassPron
-                    ? `✅ Đạt ${PASS_PRON_SCORE}% — có thể bấm Đúng`
-                    : `🔒 Cần >= ${PASS_PRON_SCORE}% để bấm Đúng`}
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* Panel */}
@@ -1182,20 +1438,98 @@ export default function LearnVocab() {
               </div>
             </div>
           </div>
+
+          {/* Pron (đặt dưới panel để mobile thấy "Nhập" trước, rồi mới "Chấm") */}
+          <div className="lv-pron">
+            <div className="lv-pron-head">
+              <div className="lv-pron-title">🎯 Chấm phát âm</div>
+              <div className="lv-pron-score">
+                {pronScore === null ? "—" : `${pronScore}%`}
+              </div>
+            </div>
+
+            <div className="lv-pron-row">
+              <div className="lv-pron-label">Bạn nói</div>
+              <div className="lv-pron-text">{spokenText || "Chưa có"}</div>
+            </div>
+
+            <div className="lv-pron-row">
+              <div className="lv-pron-label">Đáp án</div>
+              <div className="lv-pron-tokens">
+                {expectedTokensUI.length === 0 ? (
+                  <span className="lv-pron-muted">Bấm “Nói” để chấm</span>
+                ) : (
+                  expectedTokensUI.map((t, idx) => (
+                    <span
+                      key={`${t.token}-${idx}`}
+                      className={`lv-pill ${t.status}`}
+                      title={
+                        t.status === "correct"
+                          ? "Đúng"
+                          : t.status === "missing"
+                          ? "Thiếu"
+                          : `Bạn nói: ${t.got || ""}`
+                      }
+                    >
+                      {t.token}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {extraTokens.length > 0 && (
+              <div className="lv-pron-row">
+                <div className="lv-pron-label">Bạn nói dư</div>
+                <div className="lv-pron-tokens">
+                  {extraTokens.map((x, i) => (
+                    <span key={`${x}-${i}`} className="lv-pill extra">
+                      {x}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {expectedTokensUI.some((t) => t.status !== "correct") && (
+              <div className="lv-pron-tips">
+                <div className="lv-pron-tips-title">Gợi ý sửa</div>
+                <ul>
+                  {expectedTokensUI
+                    .filter((t) => t.status !== "correct")
+                    .flatMap((t, idx) =>
+                      (t.tips || []).map((tip, j) => (
+                        <li key={`${idx}-${j}`}>
+                          <b className="mono">{t.token}</b>: {tip}
+                        </li>
+                      ))
+                    )}
+                </ul>
+              </div>
+            )}
+
+            <div className="lv-pron-gate">
+              <span className={`lv-gate ${canPassPron ? "ok" : "lock"}`}>
+                {canPassPron
+                  ? `✅ Đạt ${PASS_PRON_SCORE}% — có thể bấm Đúng`
+                  : `🔒 Cần >= ${PASS_PRON_SCORE}% để bấm Đúng`}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Toolbar */}
         <div className="lv-toolbar">
           <div className="lv-toolbar-left">
             {FEATURES.speak && (
-              <button className="lv-btn" onClick={speak}>
+              <button className="lv-btn lv-btn--hear" onClick={speak}>
                 🔊 Nghe <span className="lv-kbd">S</span>
               </button>
             )}
 
             {FEATURES.record && (
               <button
-                className={`lv-btn ${isRecording ? "danger" : ""}`}
+                className={`lv-btn lv-btn--say ${isRecording ? "danger" : ""}`}
                 onClick={record}
               >
                 {isRecording ? "⏹️ Dừng" : "🎙️ Nói"} <span className="lv-kbd">R</span>
@@ -1203,7 +1537,7 @@ export default function LearnVocab() {
             )}
 
             {FEATURES.flip && (
-              <button className="lv-btn" onClick={toggleFlip}>
+              <button className="lv-btn lv-btn--flip" onClick={toggleFlip}>
                 🔁 Lật <span className="lv-kbd">Space</span>
               </button>
             )}
@@ -1213,7 +1547,7 @@ export default function LearnVocab() {
             {FEATURES.markButtons && (
               <>
                 <button
-                  className="lv-btn danger"
+                  className="lv-btn danger lv-btn--wrong"
                   onClick={markWrong}
                   disabled={posting}
                 >
@@ -1221,7 +1555,7 @@ export default function LearnVocab() {
                 </button>
 
                 <button
-                  className={`lv-btn primary ${canPassPron ? "" : "locked"}`}
+                  className={`lv-btn primary lv-btn--correct ${canPassPron ? "" : "locked"}`}
                   onClick={canPassPron ? markCorrect : explainLocked}
                   disabled={posting}
                   aria-disabled={!canPassPron}
@@ -1239,7 +1573,7 @@ export default function LearnVocab() {
             {mode === "selected" ? (
               <>
                 <button
-                  className="lv-btn"
+                  className="lv-btn lv-btn--next"
                   onClick={() => {
                     const start = Math.min(
                       selectedIndexRef.current + 1,
@@ -1264,7 +1598,7 @@ export default function LearnVocab() {
                 </button>
 
                 <button
-                  className="lv-btn danger"
+                  className="lv-btn danger lv-btn--aux"
                   onClick={resetSelectedSession}
                   disabled={posting || loading}
                 >
@@ -1272,7 +1606,7 @@ export default function LearnVocab() {
                 </button>
 
                 <button
-                  className="lv-btn"
+                  className="lv-btn lv-btn--aux"
                   onClick={goBackBook}
                   disabled={posting || loading}
                 >
@@ -1280,7 +1614,7 @@ export default function LearnVocab() {
                 </button>
 
                 <button
-                  className="lv-btn primary"
+                  className="lv-btn primary lv-btn--aux"
                   onClick={goRandom}
                   disabled={posting || loading}
                 >
@@ -1298,7 +1632,7 @@ export default function LearnVocab() {
                 </button>
 
                 <button
-                  className="lv-btn"
+                  className="lv-btn lv-btn--mylist"
                   onClick={goSelected}
                   disabled={posting || loading}
                 >

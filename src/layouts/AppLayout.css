@@ -1,7 +1,23 @@
 .app-layout {
+  /* default desktop */
+  --bottom-nav-h: 0px;
+
   display: flex;
   width: 100%;
   min-height: 100dvh;
+}
+
+.app-layout--mobile {
+  /* used by pages that need safe bottom inset */
+  --bottom-nav-h: 76px;
+
+  /* helps the edge-swipe gesture without breaking vertical scroll */
+  touch-action: pan-y;
+}
+
+/* When the mobile drawer is open we hide the bottom tab bar, so remove the bottom inset */
+.app-layout--mobile.app-layout--menuOpen {
+  --bottom-nav-h: 0px;
 }
 
 .app-content {
@@ -11,38 +27,17 @@
   background-color: var(--bg-main);
 }
 
-/* Mobile: sidebar becomes a drawer; content should take full width */
-@media (max-width: 768px) {
-  .app-layout {
-    height: auto;
-  }
+/* Ensure fixed bottom nav never covers content */
+.app-layout--mobile .app-content {
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+}
 
-  .app-content {
-    padding: 56px 12px 24px;
-  }
-
-  .mobileMenuBtn {
-    position: fixed;
-    left: 12px;
-    top: 12px;
-    z-index: 1300;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(18, 18, 24, 0.55);
-    backdrop-filter: blur(10px);
-    color: #fff;
-  }
-
-  .mobileDrawerOverlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1190;
-    background: rgba(0,0,0,0.45);
-    backdrop-filter: blur(2px);
-  }
+/* Mobile drawer overlay */
+.mobile-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  border: 0;
 }

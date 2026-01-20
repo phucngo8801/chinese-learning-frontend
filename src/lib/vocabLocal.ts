@@ -3,8 +3,6 @@
 // IMPORTANT: These keys MUST be scoped per-user because localStorage is shared
 // across accounts in the same browser.
 
-import { getAuthToken } from "./authToken";
-
 export type Mode = "random" | "selected";
 
 export type PronItem = {
@@ -26,13 +24,6 @@ export type DailyStats = {
   total: number;
   uniqueIds: number[];
   byMode: Record<Mode, { correct: number; wrong: number; total: number }>;
-};
-
-export type PronAttempt = {
-  vocabId: number;
-  score: number;
-  transcript?: string; // ✅ accept
-  lastText?: string; // ✅ accept
 };
 
 /**
@@ -69,7 +60,11 @@ export function getLocalUid() {
 
   // Fallback: scope by token if user is logged in but hasn't gone through
   // the updated login flow yet (avoid shared "guest").
-  const token = getAuthToken();
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token");
+
   if (token) return normalizeUid(`tok:${token.slice(0, 32)}`);
 
   return "guest";
@@ -118,87 +113,48 @@ export function getPronMap(): PronMap {
 
 export function setPronMap(map: PronMap) {
   const k = scopedKey(PRON_KEY_BASE);
-  localStorage.setItem(k, JSON.stringify(map || {}));
+  localStorage.setItem(k, JSON.stringify(map));
 }
 
-/**
- * ✅ Backward compatible:
- * - savePronAttempt(vocabId, score, lastText?)
- * - savePronAttempt({ vocabId, score, transcript? / lastText? })
- */
-export function savePronAttempt(vocabIdOrArgs: number | PronAttempt, score?: number, lastText?: string): void {
-  const args: PronAttempt =
-    typeof vocabIdOrArgs === "number"
-      ? { vocabId: vocabIdOrArgs, score: Number(score ?? 0), lastText: lastText ?? "" }
-      : vocabIdOrArgs;
-
-  const vocabId = Number(args.vocabId);
-  const s = Number.isFinite(args.score) ? args.score : 0;
-
-  // ✅ accept both transcript + lastText
-  const txt = (args.transcript ?? args.lastText ?? "").toString();
-
-  if (!Number.isFinite(vocabId)) return;
-
+export function savePronAttempt(args: { vocabId: number; score: number; transcript: string }) {
   const map = getPronMap();
-  const now = Date.now();
+  const prev = map[args.vocabId];
 
-  const prev = map[vocabId];
-  if (!prev) {
-    map[vocabId] = {
-      vocabId,
-      lastScore: s,
-      bestScore: s,
-      avgScore: s,
-      attempts: 1,
-      lastText: txt,
-      lastAt: now,
-    };
-    setPronMap(map);
-    return;
-  }
+  const attempts = (prev?.attempts ?? 0) + 1;
+  const prevAvg = prev?.avgScore ?? 0;
+  const avgScore = Math.round((prevAvg * (attempts - 1) + args.score) / attempts);
 
-  const attempts = (prev.attempts ?? 0) + 1;
-  const bestScore = Math.max(prev.bestScore ?? 0, s);
+  const bestScore = Math.max(prev?.bestScore ?? 0, args.score);
 
-  // moving average
-  const prevAvg = Number(prev.avgScore ?? 0);
-  const avgScore = (prevAvg * (attempts - 1) + s) / attempts;
-
-  map[vocabId] = {
-    ...prev,
-    lastScore: s,
+  map[args.vocabId] = {
+    vocabId: args.vocabId,
+    lastScore: args.score,
     bestScore,
     avgScore,
     attempts,
-    lastText: txt,
-    lastAt: now,
+    lastText: args.transcript,
+    lastAt: Date.now(),
   };
 
   setPronMap(map);
 }
 
+export function getPronFor(vocabId: number): PronItem | null {
+  const map = getPronMap();
+  return map[vocabId] ?? null;
+}
+
 /* ---------------- DAILY STATS ---------------- */
 export function getDailyStats(): DailyStats {
+  const today = getLocalDateKey();
   const k = scopedKey(STATS_KEY_BASE);
+
   tryMigrateLegacy<DailyStats>(k, STATS_KEY_LEGACY);
 
-  const today = getLocalDateKey();
-  const st = safeParse<DailyStats>(localStorage.getItem(k), {
-    dateKey: today,
-    correct: 0,
-    wrong: 0,
-    total: 0,
-    uniqueIds: [],
-    byMode: {
-      random: { correct: 0, wrong: 0, total: 0 },
-      selected: { correct: 0, wrong: 0, total: 0 },
-    },
-  });
+  const raw = safeParse<DailyStats | null>(localStorage.getItem(k), null);
 
-  // reset if date changed
-  if (st.dateKey !== today) {
-    return {
+  if (!raw || raw.dateKey !== today) {
+    const fresh: DailyStats = {
       dateKey: today,
       correct: 0,
       wrong: 0,
@@ -209,69 +165,34 @@ export function getDailyStats(): DailyStats {
         selected: { correct: 0, wrong: 0, total: 0 },
       },
     };
+    localStorage.setItem(k, JSON.stringify(fresh));
+    return fresh;
   }
 
-  return st;
+  return {
+    ...raw,
+    byMode: {
+      random: raw.byMode?.random ?? { correct: 0, wrong: 0, total: 0 },
+      selected: raw.byMode?.selected ?? { correct: 0, wrong: 0, total: 0 },
+    },
+  };
 }
 
-export function setDailyStats(stats: DailyStats) {
+export function bumpDaily(args: { vocabId: number; correct: boolean; mode: Mode }) {
+  const s = getDailyStats();
+  const isCorrect = args.correct;
+
+  s.total += 1;
+  if (isCorrect) s.correct += 1;
+  else s.wrong += 1;
+
+  s.byMode[args.mode].total += 1;
+  if (isCorrect) s.byMode[args.mode].correct += 1;
+  else s.byMode[args.mode].wrong += 1;
+
+  if (!s.uniqueIds.includes(args.vocabId)) s.uniqueIds.push(args.vocabId);
+
   const k = scopedKey(STATS_KEY_BASE);
-  localStorage.setItem(k, JSON.stringify(stats));
-}
-
-/**
- * bumpDailyStats: always returns updated stats (NOT void)
- */
-export function bumpDailyStats(args: { correct?: boolean; vocabId?: number; mode?: Mode }): DailyStats {
-  const st = getDailyStats();
-
-  const mode: Mode = args.mode || "random";
-  if (!st.byMode[mode]) st.byMode[mode] = { correct: 0, wrong: 0, total: 0 };
-
-  st.total += 1;
-  st.byMode[mode].total += 1;
-
-  if (args.correct) {
-    st.correct += 1;
-    st.byMode[mode].correct += 1;
-  } else {
-    st.wrong += 1;
-    st.byMode[mode].wrong += 1;
-  }
-
-  if (typeof args.vocabId === "number") {
-    if (!st.uniqueIds.includes(args.vocabId)) st.uniqueIds.push(args.vocabId);
-  }
-
-  setDailyStats(st);
-  return st;
-}
-
-/**
- * ✅ Backward compatible:
- * - bumpDaily(true/false, vocabId?, mode?)
- * - bumpDaily({ correct, vocabId, mode })
- *
- * RETURNS DailyStats (NOT void)
- */
-export function bumpDaily(
-  correctOrArgs: boolean | { correct?: boolean; vocabId?: number; mode?: Mode },
-  vocabId?: number,
-  mode?: Mode
-): DailyStats {
-  if (typeof correctOrArgs === "boolean") {
-    return bumpDailyStats({ correct: correctOrArgs, vocabId, mode });
-  }
-  return bumpDailyStats(correctOrArgs || {});
-}
-
-/* ---------------- RESET ---------------- */
-export function resetLocalLearning() {
-  // Clear all scoped keys for current uid
-  const uid = getLocalUid();
-  const suffix = `::${uid}`;
-
-  for (const k of Object.keys(localStorage)) {
-    if (k.endsWith(suffix)) localStorage.removeItem(k);
-  }
+  localStorage.setItem(k, JSON.stringify(s));
+  return s;
 }

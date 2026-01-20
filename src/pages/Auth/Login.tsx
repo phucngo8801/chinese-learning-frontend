@@ -1,7 +1,6 @@
 import { useState } from "react";
 import api from "../../api/axios";
 import { setLocalUid } from "../../lib/vocabLocal";
-import { setAuthToken } from "../../lib/authToken";
 import "./Login.css";
 
 export default function Login() {
@@ -18,7 +17,7 @@ export default function Login() {
     try {
       const res = await api.post("/auth/login", { email, password });
 
-      setAuthToken(res.data.accessToken);
+      localStorage.setItem("token", res.data.accessToken);
 
       // ✅ Scope local stats per-user (fix user2 seeing user1 mic/stats)
       setLocalUid(email);

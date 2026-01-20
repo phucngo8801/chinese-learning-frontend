@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom";
 import toast from "../../lib/toast";
 import { playTing } from "../../lib/ting";
 import { connectSocket, disconnectSocket, getSocket } from "../../lib/socket";
-import { getAuthToken } from "../../lib/authToken";
 
 type RealtimeContextValue = {
   activeConversationId: string | null;
@@ -23,7 +22,12 @@ export function useRealtime() {
 }
 
 function getToken() {
-  return getAuthToken();
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    ""
+  );
 }
 
 function getMyIdFromToken(): string | null {
@@ -57,7 +61,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       onlineMap,
       onlineUserIds,
     }),
-    [activeConversationId, onlineMap, onlineUserIds]
+    [activeConversationId, onlineMap, onlineUserIds],
   );
 
   // presence listeners
@@ -93,11 +97,11 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
     };
   }, []);
 
-  // connect/disconnect by token (event-driven, no polling)
+  // connect/disconnect by token
   useEffect(() => {
     let last = "";
 
-    const sync = () => {
+    const tick = () => {
       const t = getToken();
       if (t === last) return;
       last = t;
@@ -110,22 +114,14 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       }
     };
 
-    // Initial sync
-    sync();
+    tick();
+    const id = window.setInterval(tick, 600);
 
-    // Same-tab changes
-    const onAuth = () => sync();
-    window.addEventListener("auth:token", onAuth);
-
-    // Other-tab changes
-    const onStorage = (e: StorageEvent) => {
-      if (!e.key) return;
-      if (e.key === "token" || e.key === "accessToken" || e.key === "access_token") sync();
-    };
+    const onStorage = () => tick();
     window.addEventListener("storage", onStorage);
 
     return () => {
-      window.removeEventListener("auth:token", onAuth);
+      window.clearInterval(id);
       window.removeEventListener("storage", onStorage);
     };
   }, []);
@@ -149,11 +145,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
         msg?.deletedAt
           ? "Tin nhắn đã được thu hồi"
           : (msg?.text || msg?.content || "") ||
-            (msg?.type === "IMAGE"
-              ? "[Hình ảnh]"
-              : msg?.type === "FILE"
-              ? "[Tệp đính kèm]"
-              : "Tin nhắn mới");
+            (msg?.type === "IMAGE" ? "[Hình ảnh]" : msg?.type === "FILE" ? "[Tệp đính kèm]" : "Tin nhắn mới");
       const senderName =
         msg?.sender?.name ||
         msg?.sender?.email ||

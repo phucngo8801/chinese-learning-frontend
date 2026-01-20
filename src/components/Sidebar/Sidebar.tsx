@@ -179,16 +179,28 @@ function DropdownGroup({
 }
 
 type SidebarProps = {
+  /** Whether the layout is currently in mobile mode (driven by AppLayout). */
+  isMobile?: boolean;
   /** Mobile drawer state (AppLayout controls this). */
   mobileOpen?: boolean;
   /** Called when user navigates (to close the drawer on mobile). */
   onMobileClose?: () => void;
 };
 
-export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
+export default function Sidebar({ isMobile, mobileOpen, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [streak, setStreak] = useState<StreakStatus | null>(null);
   const [mythic, setMythic] = useState(true);
+
+  const mobile = !!isMobile;
+
+  // Keep the mobile drawer light-weight (no FX interval).
+  useEffect(() => {
+    if (mobile) setMythic(false);
+  }, [mobile]);
+
+  // Mobile-friendly: show "Trung tâm" items inline (accordion) instead of a portal dropdown.
+  const [centerOpen, setCenterOpen] = useState(false);
 
   const [mascot, setMascot] = useState<MascotMode>(() => {
     const v = localStorage.getItem("mascotMode");
@@ -200,16 +212,20 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const sbRef = useRef<HTMLElement | null>(null);
   const smokeLayerRef = useRef<HTMLDivElement | null>(null);
 
-  const NAV_MAIN: NavItem[] = [
+  // Desktop has full sidebar navigation. On mobile, the bottom tab already covers
+  // Học / Sổ / Bạn / Chat, so the drawer only keeps what's not on the tab bar.
+  const NAV_MAIN_DESKTOP: NavItem[] = [
     { to: "/learn-vocab", label: "Học từ vựng", icon: "📖" },
     { to: "/vocab-book", label: "Sổ từ vựng", icon: "📒" },
     { to: "/friends", label: "Bạn bè", icon: "👥" },
     { to: "/settings", label: "Cài đặt", icon: "⚙️" },
   ];
 
-  const NAV_CHAT: NavItem[] = [
-    { to: "/chat", label: "Chat", icon: "💬" },
+  const NAV_MAIN_MOBILE: NavItem[] = [
+    { to: "/settings", label: "Cài đặt", icon: "⚙️" },
   ];
+
+  const NAV_CHAT: NavItem[] = [{ to: "/chat", label: "Chat", icon: "💬" }];
 
   const NAV_CENTER: NavItem[] = [
     { to: "/leaderboard", label: "BXH", icon: "🏆" },
@@ -228,13 +244,12 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   );
 
   const hasActive = useMemo(() => {
-    return (
-      NAV_MAIN.some((i) => i.to === activePath) ||
-      NAV_CHAT.some((i) => i.to === activePath) ||
-      NAV_CENTER.some((i) => i.to === activePath)
-    );
+    const main = (mobile ? NAV_MAIN_MOBILE : NAV_MAIN_DESKTOP).some((i) => i.to === activePath);
+    const chat = !mobile && NAV_CHAT.some((i) => i.to === activePath);
+    const center = NAV_CENTER.some((i) => i.to === activePath);
+    return main || chat || center;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePath]);
+  }, [activePath, mobile]);
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -249,6 +264,25 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const closeMobile = () => {
     if (mobileOpen) onMobileClose?.();
   };
+
+  const toggleCollapsed = () => {
+    if (mobile) return closeMobile();
+    setCollapsed((v) => !v);
+  };
+
+  // Reset accordion when leaving mobile or closing the drawer.
+  useEffect(() => {
+    if (!isMobile) setCenterOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile && !mobileOpen) setCenterOpen(false);
+  }, [isMobile, mobileOpen]);
+
+  // When the mobile drawer opens, expand "Trung tâm" so users can see these pages immediately.
+  useEffect(() => {
+    if (isMobile && mobileOpen) setCenterOpen(true);
+  }, [isMobile, mobileOpen]);
 
   const clearSmoke = () => {
     const layer = smokeLayerRef.current;
@@ -381,10 +415,10 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         <button
           type="button"
           className="sb__toggle"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-label="Toggle sidebar"
+          onClick={toggleCollapsed}
+          aria-label={mobile ? "Đóng menu" : "Thu gọn sidebar"}
         >
-          ☰
+          {mobile ? "✕" : "☰"}
         </button>
 
         <div className="sb__brand">
@@ -400,27 +434,31 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          className={`sb__mythicBtn ${mythic ? "is-on" : ""}`}
-          onClick={() => setMythic((v) => !v)}
-          title={mythic ? "Tắt Hoá Thần" : "Bật Hoá Thần"}
-          aria-label="Toggle mythic mode"
-          aria-pressed={mythic}
-        >
-          ✨
-        </button>
+        {!mobile && (
+          <>
+            <button
+              type="button"
+              className={`sb__mythicBtn ${mythic ? "is-on" : ""}`}
+              onClick={() => setMythic((v) => !v)}
+              title={mythic ? "Tắt Hoá Thần" : "Bật Hoá Thần"}
+              aria-label="Toggle mythic mode"
+              aria-pressed={mythic}
+            >
+              ✨
+            </button>
 
-        <div className="sb__miniChip" title="Streak">
-          🔥{streak?.currentStreak ?? 0}
-        </div>
+            <div className="sb__miniChip" title="Streak">
+              🔥{streak?.currentStreak ?? 0}
+            </div>
+          </>
+        )}
       </div>
 
       <nav className="sb__nav">
         <div className="sb__section">
-          {!collapsed && <div className="sb__sectionTitle">Học</div>}
+          {!collapsed && !mobile && <div className="sb__sectionTitle">Học</div>}
 
-          {NAV_MAIN.map((item) => {
+          {(mobile ? NAV_MAIN_MOBILE : NAV_MAIN_DESKTOP).map((item) => {
             const active = isActive(item.to);
             return (
               <Link
@@ -452,145 +490,209 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           })}
         </div>
 
-      <div className="sb__section">
-  {!collapsed && <div className="sb__sectionTitle">Cộng đồng</div>}
+        {!mobile && (
+          <div className="sb__section">
+            {!collapsed && <div className="sb__sectionTitle">Cộng đồng</div>}
 
-  <Link
-    to="/chat"
-    className={isActive("/chat") ? "sb__link sb__link--active" : "sb__link"}
-    title="Chat"
-    aria-current={isActive("/chat") ? "page" : undefined}
-    onClick={closeMobile}
-    onMouseEnter={(e) => {
-      if (!mythic) return;
-      const sb = sbRef.current;
-      if (!sb) return;
+            <Link
+              to="/chat"
+              className={isActive("/chat") ? "sb__link sb__link--active" : "sb__link"}
+              title="Chat"
+              aria-current={isActive("/chat") ? "page" : undefined}
+              onClick={closeMobile}
+              onMouseEnter={(e) => {
+                if (!mythic) return;
+                const sb = sbRef.current;
+                if (!sb) return;
 
-      const sbRect = sb.getBoundingClientRect();
-      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const x = clamp(r.left - sbRect.left + r.width / 2, 18, sbRect.width - 18);
-      const y = clamp(r.top - sbRect.top + r.height / 2, 18, sbRect.height - 18);
-      spawnSmoke(x, y, 1.25);
-    }}
-  >
-    <span className="sb__iconBox" aria-hidden="true">
-      <span className="sb__icon">💬</span>
-    </span>
-    <span className="sb__text">Chat</span>
-    <span className="sb__glow" aria-hidden="true" />
-  </Link>
-</div>
+                const sbRect = sb.getBoundingClientRect();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const x = clamp(
+                  r.left - sbRect.left + r.width / 2,
+                  18,
+                  sbRect.width - 18
+                );
+                const y = clamp(
+                  r.top - sbRect.top + r.height / 2,
+                  18,
+                  sbRect.height - 18
+                );
+                spawnSmoke(x, y, 1.25);
+              }}
+            >
+              <span className="sb__iconBox" aria-hidden="true">
+                <span className="sb__icon">💬</span>
+              </span>
+              <span className="sb__text">Chat</span>
+              <span className="sb__glow" aria-hidden="true" />
+            </Link>
+          </div>
+        )}
 
 
         <div className="sb__section">
-          {!collapsed && <div className="sb__sectionTitle">Khác</div>}
+          {!collapsed && !mobile && <div className="sb__sectionTitle">Khác</div>}
 
-          <DropdownGroup
-            icon="📌"
-            label="Trung tâm"
-            active={groupCenterActive}
-            collapsed={collapsed}
-          >
-            {(close) => (
-              <div className="sb__dropdownList">
-                {NAV_CENTER.map((i) => (
-                  <Link
-                    key={i.to}
-                    to={i.to}
-                    className={isActive(i.to) ? "sb__ddItem is-active" : "sb__ddItem"}
-                    onClick={() => {
-                      close();
-                      closeMobile();
-                    }}
-                    title={i.label}
-                  >
-                    <span className="sb__ddIcon">{i.icon}</span>
-                    <div className="sb__ddText">
-                      <div className="sb__ddTitle">{i.label}</div>
-                      <div className="sb__ddSub">
-                        {i.to === "/leaderboard"
-                          ? "Xếp hạng học tập"
-                          : i.to === "/activity"
-                          ? "Dòng hoạt động"
-                          : "Tin mới hệ thống"}
+          {mobile ? (
+            <>
+              <button
+                type="button"
+                className={[
+                  "sb__link",
+                  "sb__link--group",
+                  centerOpen ? "is-open" : "",
+                  groupCenterActive ? "sb__link--active" : "",
+                  "sb__linkBtn",
+                ].join(" ")}
+                onClick={() => setCenterOpen((s) => !s)}
+                aria-expanded={centerOpen}
+              >
+                <span className="sb__iconBox" aria-hidden="true">
+                  <span className="sb__icon">📌</span>
+                </span>
+                <span className="sb__text">Trung tâm</span>
+                {!collapsed && (
+                  <span className="sb__chev">▾</span>
+                )}
+                <span className="sb__glow" aria-hidden="true" />
+              </button>
+
+              {centerOpen && (
+                <div className="sb__accordionList">
+                  {NAV_CENTER.map((i) => (
+                    <Link
+                      key={i.to}
+                      to={i.to}
+                      className={isActive(i.to) ? "sb__ddItem is-active" : "sb__ddItem"}
+                      onClick={closeMobile}
+                      title={i.label}
+                    >
+                      <span className="sb__ddIcon">{i.icon}</span>
+                      <div className="sb__ddText">
+                        <div className="sb__ddTitle">{i.label}</div>
+                        <div className="sb__ddSub">
+                          {i.to === "/leaderboard"
+                            ? "Xếp hạng học tập"
+                            : i.to === "/activity"
+                            ? "Dòng hoạt động"
+                            : "Tin mới hệ thống"}
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </DropdownGroup>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <DropdownGroup
+              icon="📌"
+              label="Trung tâm"
+              active={groupCenterActive}
+              collapsed={collapsed}
+            >
+              {(close) => (
+                <div className="sb__dropdownList">
+                  {NAV_CENTER.map((i) => (
+                    <Link
+                      key={i.to}
+                      to={i.to}
+                      className={isActive(i.to) ? "sb__ddItem is-active" : "sb__ddItem"}
+                      onClick={() => {
+                        close();
+                        closeMobile();
+                      }}
+                      title={i.label}
+                    >
+                      <span className="sb__ddIcon">{i.icon}</span>
+                      <div className="sb__ddText">
+                        <div className="sb__ddTitle">{i.label}</div>
+                        <div className="sb__ddSub">
+                          {i.to === "/leaderboard"
+                            ? "Xếp hạng học tập"
+                            : i.to === "/activity"
+                            ? "Dòng hoạt động"
+                            : "Tin mới hệ thống"}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </DropdownGroup>
+          )}
         </div>
 
         <div className="sb__spacer" />
       </nav>
 
-      {/* Mascot */}
-      <div className="sb__mascot" aria-label="Mascot">
-        <div className="sb__mascotTop">
-          <div className="sb__mascotTitle">
-            {mascot === "kid"
-              ? "Trồng hoa"
-              : mascot === "cat"
-              ? "Mèo nhảy"
-              : "Slime lăn"}
+      {/* Mascot is desktop-only (mobile drawer should stay compact). */}
+      {!mobile && (
+        <div className="sb__mascot" aria-label="Mascot">
+          <div className="sb__mascotTop">
+            <div className="sb__mascotTitle">
+              {mascot === "kid"
+                ? "Trồng hoa"
+                : mascot === "cat"
+                ? "Mèo nhảy"
+                : "Slime lăn"}
+            </div>
+            <button
+              type="button"
+              className="sb__mascotBtn"
+              onClick={nextMascot}
+              title="Đổi mascot"
+              aria-label="Đổi mascot"
+            >
+              🎭
+            </button>
           </div>
-          <button
-            type="button"
-            className="sb__mascotBtn"
-            onClick={nextMascot}
-            title="Đổi mascot"
-            aria-label="Đổi mascot"
-          >
-            🎭
-          </button>
+
+          {mascot === "kid" && (
+            <div className="sb__mascotStage">
+              <div className="sb__kid">
+                <div className="sb__kidHead" />
+                <div className="sb__kidBody" />
+                <div className="sb__kidHand left" />
+                <div className="sb__kidHand right" />
+                <div className="sb__kidLeg left" />
+                <div className="sb__kidLeg right" />
+              </div>
+
+              <div className="sb__pot">
+                <div className="sb__soil" />
+                <div className="sb__sprout" />
+                <div className="sb__flower" />
+                <div className="sb__sparkle s1" />
+                <div className="sb__sparkle s2" />
+                <div className="sb__sparkle s3" />
+              </div>
+            </div>
+          )}
+
+          {mascot === "cat" && (
+            <div className="sb__mascotStage">
+              <div className="sb__cat">
+                <div className="sb__catEar left" />
+                <div className="sb__catEar right" />
+                <div className="sb__catFace" />
+                <div className="sb__catTail" />
+                <div className="sb__catShadow" />
+              </div>
+            </div>
+          )}
+
+          {mascot === "slime" && (
+            <div className="sb__mascotStage">
+              <div className="sb__slime">
+                <div className="sb__slimeEye left" />
+                <div className="sb__slimeEye right" />
+                <div className="sb__slimeMouth" />
+                <div className="sb__slimeShine" />
+              </div>
+            </div>
+          )}
         </div>
-
-        {mascot === "kid" && (
-          <div className="sb__mascotStage">
-            <div className="sb__kid">
-              <div className="sb__kidHead" />
-              <div className="sb__kidBody" />
-              <div className="sb__kidHand left" />
-              <div className="sb__kidHand right" />
-              <div className="sb__kidLeg left" />
-              <div className="sb__kidLeg right" />
-            </div>
-
-            <div className="sb__pot">
-              <div className="sb__soil" />
-              <div className="sb__sprout" />
-              <div className="sb__flower" />
-              <div className="sb__sparkle s1" />
-              <div className="sb__sparkle s2" />
-              <div className="sb__sparkle s3" />
-            </div>
-          </div>
-        )}
-
-        {mascot === "cat" && (
-          <div className="sb__mascotStage">
-            <div className="sb__cat">
-              <div className="sb__catEar left" />
-              <div className="sb__catEar right" />
-              <div className="sb__catFace" />
-              <div className="sb__catTail" />
-              <div className="sb__catShadow" />
-            </div>
-          </div>
-        )}
-
-        {mascot === "slime" && (
-          <div className="sb__mascotStage">
-            <div className="sb__slime">
-              <div className="sb__slimeEye left" />
-              <div className="sb__slimeEye right" />
-              <div className="sb__slimeMouth" />
-              <div className="sb__slimeShine" />
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="sb__footer">
         <button

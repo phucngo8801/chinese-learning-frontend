@@ -818,7 +818,7 @@
 .scroll-bottom {
   position: absolute;
   right: 18px;
-  bottom: 92px;
+  bottom: calc(92px + var(--bottom-nav-h, 0px));
   z-index: 9;
 
   width: 42px;
@@ -846,6 +846,7 @@
 @media (max-width: 780px) {
   .chat-page {
     grid-template-columns: 1fr;
+    height: calc(100dvh - var(--bottom-nav-h, 0px));
   }
   .chat-sidebar {
     display: none;

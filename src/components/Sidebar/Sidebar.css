@@ -271,6 +271,27 @@
   background: rgba(79,70,229,0.95);
 }
 
+/* Button that looks like a sidebar link (used for mobile accordion triggers) */
+.sb__linkBtn{
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+/* Inline nested links (mobile-friendly alternative to floating dropdown) */
+.sb__accordionList{
+  margin-top: 6px;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px dashed rgba(15,23,42,0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .sb__link--group{
   cursor:pointer;
 }
@@ -820,6 +841,9 @@
     transition: transform .22s ease;
     z-index: 1200;
     border-radius: 0 18px 18px 0;
+
+    /* prevent bottom tab bar from covering menu items */
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .sb.sb--mobileOpen{
@@ -845,7 +869,47 @@
     display: none !important;
   }
 
-  .sb__top{ padding: 12px 12px 6px; }
-  .sb__nav{ padding: 6px 10px 14px; }
-  .sb__footer{ padding: 10px; }
+  /* Compact spacing so the drawer never "vỡ" on small screens */
+  .sb__header{ padding: 12px; }
+  .sb__toggle{ width: 38px; height: 38px; border-radius: 12px; }
+  .sb__title{ font-size: 14px; }
+  .sb__chips{ gap: 6px; }
+  .sb__chip{ padding: 4px 8px; font-size: 11px; }
+
+  .sb__nav{
+    padding: 10px 10px 14px;
+    overflow-y: auto;
+  }
+
+  .sb__section{ gap: 4px; }
+  .sb__sectionTitle{ display: none; }
+
+  .sb__link{
+    padding: 8px 10px;
+    border-radius: 12px;
+    gap: 10px;
+  }
+
+  .sb__iconBox{
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    flex: 0 0 34px;
+  }
+  .sb__icon{ font-size: 17px; }
+  .sb__text{ font-size: 13px; max-width: 220px; }
+
+  .sb__accordionList{
+    margin-top: 4px;
+    margin-left: 4px;
+    padding-left: 8px;
+    gap: 4px;
+  }
+
+  .sb__ddItem{ padding: 8px 10px; border-radius: 12px; }
+  .sb__ddTitle{ font-size: 13px; }
+  .sb__ddSub{ font-size: 11px; }
+
+  .sb__spacer{ min-height: 8px; }
+  .sb__footer{ padding: 10px 10px 14px; }
 }

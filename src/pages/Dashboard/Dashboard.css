@@ -13,13 +13,3 @@
   width: 100%;
   max-width: 520px;
 }
-
-@media (max-width: 768px){
-  .dashboard-main{
-    padding: 18px 12px;
-  }
-
-  .dashboard-study-card{
-    max-width: 100%;
-  }
-}

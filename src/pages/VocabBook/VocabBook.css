@@ -8,6 +8,9 @@
   margin: 0 auto;
   padding: 22px 18px 40px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* nền warm + dust như Friends */
@@ -162,6 +165,9 @@
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .vb-controls::after{
@@ -198,11 +204,40 @@
   box-shadow: 0 0 0 4px rgba(255, 140, 0, 0.14), 0 12px 28px rgba(15, 23, 42, 0.10);
 }
 
+.vb-filter-block{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vb-filter-title{
+  font-weight: 1000;
+  font-size: 12px;
+  opacity: 0.75;
+  padding-left: 4px;
+}
+
+
 .vb-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
+
+.vb-filters.vb-filters-hsk{
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.vb-filters.vb-filters-hsk::-webkit-scrollbar{ display: none; }
+
+.vb-filters.vb-filters-hsk .vb-chip{ flex: 0 0 auto; }
+
 
 .vb-chip {
   padding: 9px 12px;
@@ -261,7 +296,14 @@
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+
+
+
+
 
 .vb-list::after{
   content:"";
@@ -275,7 +317,98 @@
     radial-gradient(circle at 30% 100%, rgba(99, 102, 241, 0.07), transparent 55%);
 }
 
-.vb-item {
+.vb-list-scroll{
+  position: relative;
+  z-index: 1;
+  /* PC cũng cần cuộn trong khung (không kéo dài phá layout khi nhiều từ) */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: calc(100vh - 340px);
+  max-height: calc(100dvh - 340px);
+}
+
+.vb-pager{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(241, 245, 249, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.vb-page-btn{
+  width: 38px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  font-weight: 1000;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.vb-page-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.25);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+}
+
+.vb-page-btn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.vb-page-mid{
+  flex: 1;
+  text-align: center;
+  font-weight: 1000;
+  color: rgba(15, 23, 42, 0.82);
+  white-space: nowrap;
+}
+
+.vb-page-jump{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vb-page-input{
+  width: 64px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  padding: 0 10px;
+  font-weight: 1000;
+  outline: none;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.vb-page-input:focus{
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.10);
+}
+
+.vb-page-go{
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(99, 102, 241, 0.10);
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.vb-page-go:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+.vb-item{
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -389,7 +522,10 @@
   height: fit-content;
   position: sticky;
   top: 14px;
-  overflow: hidden;
+  /* nếu panel dài (progress/pron) thì cuộn trong panel */
+  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
 }
 
 .vb-panel::after{
@@ -536,6 +672,13 @@
   backdrop-filter: blur(10px);
 }
 
+
+
+.vb-hsk-badge{
+  border-color: rgba(15, 23, 42, 0.10);
+  background: rgba(15, 23, 42, 0.06);
+  color: rgba(15, 23, 42, 0.78);
+}
 .vb-badge.big { font-size: 12px; }
 
 .vb-badge.new {
@@ -838,5 +981,33 @@
   .vb-modal {
     width: calc(100vw - 24px);
     max-width: 560px;
+  }
+
+
+  .vb-filters{
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .vb-filters::-webkit-scrollbar{ display: none; }
+
+  .vb-filters .vb-chip{ flex: 0 0 auto; }
+
+
+  .vb-grid{
+    min-height: 0;
+  }
+
+  .vb-list{
+    height: calc(100dvh - 310px - var(--bottom-nav-h, 72px));
+    min-height: 380px;
+  }
+
+  .vb-list-scroll{
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

@@ -420,18 +420,3 @@
   .act-header{ flex-direction: column; align-items: stretch; }
   .act-actions{ justify-content: flex-end; }
 }
-
-@media (max-width: 768px), (prefers-reduced-motion: reduce){
-  .act-page{ padding: 16px 12px; }
-  .act-page::before,
-  .act-page::after{ display: none; }
-  .act-card::before,
-  .act-card::after{ display: none; }
-  .act-card{ backdrop-filter: none; }
-  .act-list{ gap: 10px; }
-  .act-item{ padding: 12px 12px; }
-  .act-item__main{ flex-direction: column; align-items: flex-start; gap: 6px; }
-  .act-item__meta{ width: 100%; justify-content: flex-start; }
-  .act-card, .act-item, .act-btn{ transition: none !important; }
-  .act-fire, .act-ember{ animation: none !important; }
-}

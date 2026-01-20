@@ -106,6 +106,9 @@
 .lv-grid {
   display: grid;
   grid-template-columns: 1.35fr 0.65fr;
+  grid-template-areas:
+    "card panel"
+    "pron panel";
   gap: 16px;
   align-items: start;
 }
@@ -113,13 +116,26 @@
 @media (max-width: 950px) {
   .lv-grid {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "card"
+      "panel"
+      "pron";
   }
 }
 
 /* ---------- Card flip ---------- */
 .lv-card-area {
+  grid-area: card;
   display: grid;
   gap: 12px;
+}
+
+.lv-panel {
+  grid-area: panel;
+}
+
+.lv-pron {
+  grid-area: pron;
 }
 
 .lv-flip {
@@ -596,28 +612,100 @@
 }
 
 /* Mobile */
-@media (max-width: 768px), (prefers-reduced-motion: reduce) {
-  .lv-page{
-    padding: 18px 12px;
+@media (max-width: 768px) {
+  .lv-page {
+    padding: 14px 12px 150px; /* chừa chỗ cho toolbar fixed + bottom nav */
   }
 
-  .lv-head{
-    flex-direction: column;
+  .lv-header {
+    padding: 12px;
+    gap: 10px;
     align-items: stretch;
-    gap: 12px;
   }
 
-  .lv-board{
+  .lv-header h1 {
+    font-size: 22px;
+  }
+
+  .lv-sub {
+    display: none;
+  }
+
+  .lv-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lv-grid {
     grid-template-columns: 1fr;
   }
 
-  .lv-card{
-    border-radius: 18px;
+  .lv-flip {
+    height: 300px;
   }
 
-  .lv-toolbar{
-    bottom: 10px;
+  .lv-zh {
+    font-size: 64px;
+  }
+
+  .lv-hint,
+  .lv-mini {
+    display: none;
+  }
+
+  .lv-row,
+  .lv-pron-row {
+    grid-template-columns: 74px 1fr;
+  }
+
+  .lv-pron {
+    padding: 12px;
+  }
+
+  /* thu gọn: tip chi tiết chỉ xem khi cần (desktop) */
+  .lv-pron-tips {
+    display: none;
+  }
+
+  .lv-panel {
+    padding: 12px;
+  }
+
+  .lv-toolbar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    margin-top: 0;
     padding: 10px;
     backdrop-filter: none;
+    z-index: 50;
+  }
+
+  .lv-toolbar-left,
+  .lv-toolbar-right {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  /* Tap card để lật => ẩn nút Lật cho gọn */
+  .lv-btn--flip {
+    display: none;
+  }
+
+  /* Ẩn phím tắt trên mobile */
+  .lv-kbd {
+    display: none;
+  }
+
+  /* Giữ các nút học chính; ẩn bớt nút phụ */
+  .lv-btn--mylist,
+  .lv-btn--aux {
+    display: none;
+  }
+
+  /* Next vẫn giữ nhưng làm gọn */
+  .lv-btn--next {
+    padding: 10px 12px;
   }
 }

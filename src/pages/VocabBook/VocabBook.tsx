@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import toast from "../../lib/toast";
@@ -23,7 +23,7 @@ type CatalogItem = {
   zh: string;
   pinyin: string;
   vi: string;
-  level: number;
+  level: number; // dùng như "HSK" / chủ đề
   status: Status;
   selected: boolean;
   progress: Progress;
@@ -38,6 +38,8 @@ type CatalogResponse = {
 
 type FilterKey = "all" | "new" | "learning" | "due" | "weak" | "mastered" | "selected";
 
+type HskFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6;
+
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Tất cả" },
   { key: "new", label: "Chưa học" },
@@ -47,6 +49,15 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "mastered", label: "Đã nhớ" },
   { key: "selected", label: "Danh sách của tôi" },
 ];
+
+const HSKS: HskFilter[] = ["all", 1, 2, 3, 4, 5, 6];
+
+// HSK chỉ 1-6. Dữ liệu cũ có thể bị "level" lớn (ví dụ 49/100) => coi là invalid và mặc định 1.
+function clampHsk(n: any): 1 | 2 | 3 | 4 | 5 | 6 {
+  const v = parseInt(String(n ?? ""), 10);
+  if (!Number.isFinite(v) || v < 1 || v > 6) return 1;
+  return v as 1 | 2 | 3 | 4 | 5 | 6;
+}
 
 function statusLabel(s: Status) {
   switch (s) {
@@ -70,14 +81,15 @@ export default function VocabBook() {
 
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [hsk, setHsk] = useState<HskFilter>("all");
+
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
 
   const [active, setActive] = useState<CatalogItem | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // ✅ modal add vocab
   const [openAdd, setOpenAdd] = useState(false);
@@ -102,28 +114,24 @@ export default function VocabBook() {
 
   const limit = 50;
   const debouncedQ = useMemo(() => q.trim(), [q]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
 
-  const fetchPage = async (p: number, replace = false) => {
+  const fetchPage = async (p: number) => {
     try {
       setLoading(true);
 
-      const res = await api.get<CatalogResponse>("/vocab/catalog", {
-        params: { q: debouncedQ, filter, page: p, limit },
-      });
+      const params: any = { q: debouncedQ, filter, page: p, limit };
+      if (hsk !== "all") params.hsk = hsk;
 
+      const res = await api.get<CatalogResponse>("/vocab/catalog", { params });
       const data = res.data;
+
+      setItems(data.items);
       setTotal(data.total);
 
-      if (replace) {
-        setItems(data.items);
-        setHasMore(data.items.length < data.total);
-      } else {
-        setItems((prev) => {
-          const merged = [...prev, ...data.items];
-          setHasMore(merged.length < data.total);
-          return merged;
-        });
-      }
+      const serverPage = data.page ?? p;
+      setPage(serverPage);
+      setPageInput(String(serverPage));
     } catch (e) {
       console.error(e);
       toast.error("❌ Không tải được sổ từ vựng");
@@ -132,52 +140,47 @@ export default function VocabBook() {
     }
   };
 
-  // ✅ reload khi filter/q đổi
+  const gotoPage = (p: number) => {
+    const next = Math.min(Math.max(p, 1), totalPages);
+    setActive(null);
+    setPage(next);
+    setPageInput(String(next));
+    fetchPage(next);
+  };
+
+  // ✅ reload khi filter/q/hsk đổi
   useEffect(() => {
     const t = setTimeout(() => {
-      setPage(1);
       setActive(null);
-      fetchPage(1, true);
+      setPage(1);
+      setPageInput("1");
+      fetchPage(1);
       setTodayStats(getDailyStats());
       setPronMapState(getPronMap());
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, debouncedQ]);
+  }, [filter, hsk, debouncedQ]);
 
   // ✅ quay lại tab/window thì refetch => status + pron + stats cập nhật ngay
   useEffect(() => {
     const onFocus = () => {
-      fetchPage(1, true);
+      fetchPage(page);
       setTodayStats(getDailyStats());
       setPronMapState(getPronMap());
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, debouncedQ]);
+  }, [filter, hsk, debouncedQ, page]);
 
-  // infinite scroll
+  // nếu total giảm làm page vượt trần (ví dụ lọc hsk) => clamp
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (first.isIntersecting && hasMore && !loading) {
-          const next = page + 1;
-          setPage(next);
-          fetchPage(next, false);
-        }
-      },
-      { rootMargin: "200px" }
-    );
-
-    io.observe(el);
-    return () => io.disconnect();
+    if (page > totalPages) {
+      gotoPage(totalPages);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loading, page, filter, debouncedQ]);
+  }, [totalPages]);
 
   const toggleMyList = async (vocabId: number) => {
     setItems((prev) => prev.map((it) => (it.id === vocabId ? { ...it, selected: !it.selected } : it)));
@@ -244,7 +247,7 @@ export default function VocabBook() {
         zh,
         pinyin,
         vi,
-        level: newLevel || 1,
+        level: clampHsk(newLevel), // HSK/chủ đề chỉ 1-6
         addToMyList: true,
       });
 
@@ -256,8 +259,7 @@ export default function VocabBook() {
       const created = !!res.data?.created;
       toast.success(created ? "✅ Đã tạo từ mới + thêm vào danh sách" : "✅ Từ đã tồn tại, đã thêm vào danh sách");
 
-      setPage(1);
-      await fetchPage(1, true);
+      gotoPage(1);
       closeModal();
     } catch (e) {
       console.error(e);
@@ -293,8 +295,7 @@ export default function VocabBook() {
       setBulkReport(res.data);
       toast.success(`✅ Import xong: tạo ${res.data.createdCount}, đã có ${res.data.existedCount}`);
 
-      setPage(1);
-      await fetchPage(1, true);
+      gotoPage(1);
     } catch (e) {
       console.error(e);
       toast.error("❌ Import thất bại");
@@ -302,6 +303,56 @@ export default function VocabBook() {
       setSaving(false);
     }
   };
+
+  const pager = (
+    <div className="vb-pager" aria-label="Pagination">
+      <button className="vb-page-btn" onClick={() => gotoPage(1)} disabled={page <= 1 || loading}>
+        ⏮
+      </button>
+      <button className="vb-page-btn" onClick={() => gotoPage(page - 1)} disabled={page <= 1 || loading}>
+        ◀
+      </button>
+
+      <div className="vb-page-mid">
+        Trang <b>{page}</b>/<span>{totalPages}</span>
+      </div>
+
+      <div className="vb-page-jump">
+        <input
+          className="vb-page-input"
+          value={pageInput}
+          onChange={(e) => setPageInput(e.target.value)}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          aria-label="Nhập số trang"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const n = parseInt(pageInput, 10);
+              if (Number.isFinite(n)) gotoPage(n);
+            }
+          }}
+        />
+        <button
+          className="vb-page-go"
+          disabled={loading}
+          onClick={() => {
+            const n = parseInt(pageInput, 10);
+            if (!Number.isFinite(n)) return;
+            gotoPage(n);
+          }}
+        >
+          Đi
+        </button>
+      </div>
+
+      <button className="vb-page-btn" onClick={() => gotoPage(page + 1)} disabled={page >= totalPages || loading}>
+        ▶
+      </button>
+      <button className="vb-page-btn" onClick={() => gotoPage(totalPages)} disabled={page >= totalPages || loading}>
+        ⏭
+      </button>
+    </div>
+  );
 
   return (
     <div className="vb-page">
@@ -319,7 +370,8 @@ export default function VocabBook() {
             ➕ Thêm từ
           </button>
 
-          <button className="vb-add-new" onClick={() => nav("/learn-vocab?mode=selected")}>
+          <button className="vb-add-new" onClick={() => nav("/learn-vocab?mode=selected")}
+          >
             🃏 Học danh sách của tôi
           </button>
 
@@ -333,59 +385,84 @@ export default function VocabBook() {
       <div className="vb-controls">
         <input className="vb-search" placeholder="Tìm: 明天 / ming / ngày mai..." value={q} onChange={(e) => setQ(e.target.value)} />
 
-        <div className="vb-filters">
-          {FILTERS.map((f) => (
-            <button key={f.key} className={`vb-chip ${filter === f.key ? "active" : ""}`} onClick={() => setFilter(f.key)}>
-              {f.label}
-            </button>
-          ))}
+        <div className="vb-filter-block">
+          <div className="vb-filter-title">Trạng thái</div>
+          <div className="vb-filters">
+            {FILTERS.map((f) => (
+              <button key={f.key} className={`vb-chip ${filter === f.key ? "active" : ""}`} onClick={() => setFilter(f.key)}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="vb-filter-block">
+          <div className="vb-filter-title">Chủ đề (HSK)</div>
+          <div className="vb-filters vb-filters-hsk">
+            {HSKS.map((k) => {
+              const isActive = hsk === k;
+              const label = k === "all" ? "Tất cả" : `HSK ${k}`;
+              return (
+                <button key={String(k)} className={`vb-chip ${isActive ? "active" : ""}`} onClick={() => setHsk(k)}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <div className="vb-grid">
         <div className="vb-list">
-          {items.map((it) => {
-            const p = pronMap[it.id];
-            return (
-              <div key={it.id} className={`vb-item ${active?.id === it.id ? "active" : ""}`} onClick={() => setActive(it)}>
-                <div className="vb-main">
-                  <div className="vb-zh">{it.zh}</div>
-                  <div className="vb-subline">
-                    <span className="vb-py mono">{it.pinyin}</span>
-                    <span className="vb-vi">{it.vi}</span>
+          <div className="vb-list-scroll" role="list">
+            {items.map((it) => {
+              const p = pronMap[it.id];
+              return (
+                <div key={it.id} className={`vb-item ${active?.id === it.id ? "active" : ""}`} onClick={() => setActive(it)} role="listitem">
+                  <div className="vb-main">
+                    <div className="vb-zh">{it.zh}</div>
+                    <div className="vb-subline">
+                      <span className="vb-py mono">{it.pinyin}</span>
+                      <span className="vb-vi">{it.vi}</span>
+                    </div>
+                  </div>
+
+                  <div className="vb-right">
+                    <span className={`vb-badge ${it.status}`}>{statusLabel(it.status)}</span>
+
+                    <span className="vb-badge vb-hsk-badge" title="Chủ đề (HSK 1-6)">
+                      HSK {clampHsk(it.level)}
+                    </span>
+
+                    {p && (
+                      <span
+                        className="vb-badge"
+                        style={{ marginLeft: 8, opacity: 0.9 }}
+                        title={`Pron: last ${p.lastScore}% • best ${p.bestScore}% • avg ${p.avgScore}% • attempts ${p.attempts}`}
+                      >
+                        🎙 {p.lastScore}%
+                      </span>
+                    )}
+
+                    <button
+                      className={`vb-add ${it.selected ? "on" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleMyList(it.id);
+                      }}
+                    >
+                      {it.selected ? "✓ Đã chọn" : "+ Học"}
+                    </button>
                   </div>
                 </div>
+              );
+            })}
 
-                <div className="vb-right">
-                  <span className={`vb-badge ${it.status}`}>{statusLabel(it.status)}</span>
+            {!loading && items.length === 0 && <div className="vb-end">Không có dữ liệu.</div>}
+            {loading && <div className="vb-loading">Đang tải...</div>}
+          </div>
 
-                  {p && (
-                    <span
-                      className="vb-badge"
-                      style={{ marginLeft: 8, opacity: 0.9 }}
-                      title={`Pron: last ${p.lastScore}% • best ${p.bestScore}% • avg ${p.avgScore}% • attempts ${p.attempts}`}
-                    >
-                      🎙 {p.lastScore}%
-                    </span>
-                  )}
-
-                  <button
-                    className={`vb-add ${it.selected ? "on" : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleMyList(it.id);
-                    }}
-                  >
-                    {it.selected ? "✓ Đã chọn" : "+ Học"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {loading && <div className="vb-loading">Đang tải...</div>}
-          <div ref={sentinelRef} />
-          {!hasMore && !loading && items.length > 0 && <div className="vb-end">Hết dữ liệu.</div>}
+          {pager}
         </div>
 
         <div className="vb-panel">
@@ -409,8 +486,8 @@ export default function VocabBook() {
               </div>
 
               <div className="vb-panel-row">
-                <div className="vb-label">Level</div>
-                <div className="vb-value">{active.level}</div>
+                <div className="vb-label">Chủ đề (HSK)</div>
+                <div className="vb-value">HSK {clampHsk(active.level)}</div>
               </div>
 
               {active.progress && (
@@ -517,7 +594,7 @@ export default function VocabBook() {
                   </label>
 
                   <label className="vb-field">
-                    <span>Mức độ</span>
+                    <span>Chủ đề (HSK 1-6)</span>
                     <input type="number" min={1} max={6} value={newLevel} onChange={(e) => setNewLevel(Number(e.target.value || 1))} />
                   </label>
 
@@ -542,7 +619,7 @@ export default function VocabBook() {
                       学习 | xué xí | học tập | 2
                     </div>
                     <div className="vb-paste-note">
-                      Có thể bỏ level (mặc định 1). Có thể dán kiểu <b>zh | vi</b> nếu chưa có pinyin.
+                      Số cuối là <b>HSK/chủ đề</b> (1-6). Có thể bỏ (mặc định 1). Có thể dán kiểu <b>zh | vi</b> nếu chưa có pinyin.
                     </div>
                   </div>
 
@@ -555,8 +632,7 @@ export default function VocabBook() {
 
                   {bulkReport && (
                     <div className="vb-report">
-                      ✅ Valid: <b>{bulkReport.validLines}</b> / {bulkReport.totalLines} • Tạo mới: <b>{bulkReport.createdCount}</b> • Đã có:{" "}
-                      <b>{bulkReport.existedCount}</b>
+                      ✅ Valid: <b>{bulkReport.validLines}</b> / {bulkReport.totalLines} • Tạo mới: <b>{bulkReport.createdCount}</b> • Đã có: <b>{bulkReport.existedCount}</b>
                       {bulkReport.errors?.length > 0 && (
                         <div className="vb-report-err">
                           Có lỗi: <b>{bulkReport.errors.length}</b> dòng

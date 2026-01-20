@@ -1,0 +1,88 @@
+.bn {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1300;
+
+  height: calc(76px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+
+  display: flex;
+  gap: 8px;
+
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.08);
+}
+
+/* When the drawer is open, dim the bar and keep only Menu tappable. */
+.bn.is-dim {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.bn__item:disabled {
+  opacity: 0.35;
+  transform: none;
+}
+
+.bn__item:disabled:active {
+  transform: none;
+}
+
+.bn__item {
+  flex: 1;
+  border: 0;
+  background: transparent;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  border-radius: 16px;
+  padding: 8px 6px;
+
+  color: rgba(15, 23, 42, 0.80);
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.bn__item:active {
+  transform: scale(0.98);
+}
+
+.bn__icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  font-size: 18px;
+}
+
+.bn__label {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1px;
+}
+
+.bn__item.is-active {
+  background: rgba(79, 70, 229, 0.10);
+  color: rgba(15, 23, 42, 0.92);
+}
+
+.bn__item.is-active .bn__icon {
+  border-color: rgba(79, 70, 229, 0.35);
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bn__item {
+    transition: none;
+  }
+}
