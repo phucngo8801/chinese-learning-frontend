@@ -26,16 +26,15 @@ export default function AppLayout() {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia("(max-width: 768px)");
     const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    // Safari < 14
-    // @ts-expect-error - legacy API
+    
     if (mql.addEventListener) mql.addEventListener("change", onChange);
-    // @ts-expect-error - legacy API
+   
     else mql.addListener(onChange);
 
     return () => {
-      // @ts-expect-error - legacy API
+     
       if (mql.removeEventListener) mql.removeEventListener("change", onChange);
-      // @ts-expect-error - legacy API
+     
       else mql.removeListener(onChange);
     };
   }, []);
