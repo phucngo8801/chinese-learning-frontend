@@ -1,4 +1,6 @@
 import Axios from "axios";
+import toast from "../lib/toast";
+import { clearAuthToken, getAuthToken } from "../lib/authToken";
 
 const axios = Axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
@@ -7,10 +9,7 @@ const axios = Axios.create({
 
 // ✅ Auto attach Bearer token
 axios.interceptors.request.use((config) => {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token");
+  const token = getAuthToken();
 
   if (token) {
     config.headers = config.headers ?? {};
@@ -24,11 +23,26 @@ axios.interceptors.request.use((config) => {
 axios.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err?.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("access_token");
+    const status = err?.response?.status;
+
+    // Network / CORS / server down
+    if (!status) {
+      toast.error("Không kết nối được server. Kiểm tra lại mạng hoặc backend.", { id: "net-down" });
+      return Promise.reject(err);
     }
+
+    // Auth expired / invalid
+    if (status === 401) {
+      clearAuthToken();
+      // Avoid spamming toast if multiple parallel requests fail
+      toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", { id: "auth-401" });
+    }
+
+    // Rate limit
+    if (status === 429) {
+      toast.error("Bạn thao tác quá nhanh. Vui lòng thử lại sau vài giây.", { id: "rate-429" });
+    }
+
     return Promise.reject(err);
   }
 );

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { getAuthToken } from "../../lib/authToken";
 import toast from "../../lib/toast";
 import { playTing } from "../../lib/ting";
 import { connectSocket, disconnectSocket, getSocket } from "../../lib/socket";
@@ -22,14 +23,8 @@ export function useRealtime() {
 }
 
 function getToken() {
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
+  return getAuthToken();
 }
-
 function getMyIdFromToken(): string | null {
   const token = getToken();
   if (!token) return null;
@@ -40,7 +35,7 @@ function getMyIdFromToken(): string | null {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
     const payload = JSON.parse(atob(padded));
-    return payload?.sub || null;
+    return payload?.sub || payload?.id || null;
   } catch {
     return null;
   }
@@ -114,14 +109,19 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       }
     };
 
+    // first run
     tick();
-    const id = window.setInterval(tick, 600);
 
+    // same-tab signal (we dispatch this from authToken helpers)
+    const onAuthToken = () => tick();
+    window.addEventListener("auth:token", onAuthToken);
+
+    // other-tab signal (native storage event)
     const onStorage = () => tick();
     window.addEventListener("storage", onStorage);
 
     return () => {
-      window.clearInterval(id);
+      window.removeEventListener("auth:token", onAuthToken);
       window.removeEventListener("storage", onStorage);
     };
   }, []);

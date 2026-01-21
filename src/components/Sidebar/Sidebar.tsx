@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import "./Sidebar.css";
 import { clearLocalUid } from "../../lib/vocabLocal";
+import { clearAuthToken, getAuthToken } from "../../lib/authToken";
 
 type StreakStatus = {
   currentStreak: number;
@@ -252,9 +253,7 @@ export default function Sidebar({ isMobile, mobileOpen, onMobileClose }: Sidebar
   }, [activePath, mobile]);
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("access_token");
+    clearAuthToken();
 
     clearLocalUid();
 
@@ -362,10 +361,7 @@ export default function Sidebar({ isMobile, mobileOpen, onMobileClose }: Sidebar
 
   // Fetch streak
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") ||
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("access_token");
+    const token = getAuthToken();
 
     if (!token) return;
 

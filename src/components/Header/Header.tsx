@@ -1,11 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
+import { clearAuthToken } from "../../lib/authToken";
+import { clearLocalUid } from "../../lib/vocabLocal";
 import "./Header.css";
 
 export default function Header() {
   const location = useLocation();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    clearAuthToken();
+    clearLocalUid();
     window.location.href = "/login";
   };
 

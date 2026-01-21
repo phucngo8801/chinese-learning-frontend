@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import toast from "../../lib/toast";
 import "./Quiz.css";
 
 export default function Quiz() {
@@ -6,7 +7,12 @@ export default function Quiz() {
   const navigate = useNavigate();
 
   if (!state?.viText) {
-    return <p>Không có dữ liệu bài học</p>;
+    return (
+      <div className="quiz-page">
+        <p>Không có dữ liệu bài học.</p>
+        <button onClick={() => navigate("/lessons")}>Quay lại Lessons</button>
+      </div>
+    );
   }
 
   const answers = shuffle([
@@ -21,14 +27,17 @@ export default function Quiz() {
       const xp = Number(localStorage.getItem("xp") || 0) + 20;
       localStorage.setItem("xp", String(xp));
 
-      const done = JSON.parse(localStorage.getItem("doneLessons") || "[]");
-      done.push(state.viText);
-      localStorage.setItem("doneLessons", JSON.stringify(done));
+      // ✅ sync with Lessons page progress
+      const key = "done_lessons_vi";
+      const raw = localStorage.getItem(key);
+      const arr: string[] = raw ? JSON.parse(raw) : [];
+      const next = Array.from(new Set([...arr, String(state.viText)]));
+      localStorage.setItem(key, JSON.stringify(next));
 
-      alert("✅ Đúng! +20 XP");
+      toast.success("Đúng! +20 XP");
       navigate("/lessons");
     } else {
-      alert("❌ Sai! Quay lại học");
+      toast.error("Sai! Quay lại học");
       navigate(-1);
     }
   };

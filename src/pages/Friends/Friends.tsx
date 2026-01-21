@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api/axios";
+import { getAuthToken } from "../../lib/authToken";
 import toast from "../../lib/toast";
 import "./Friends.css";
 
@@ -31,7 +32,7 @@ type TabKey = "friends" | "find" | "incoming" | "sent";
 
 function decodeUserIdFromToken(): string | null {
   try {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return null;
     const payload = token.split(".")[1];
     if (!payload) return null;
@@ -44,7 +45,7 @@ function decodeUserIdFromToken(): string | null {
         .join("")
     );
     const data = JSON.parse(json);
-    return data?.sub ?? null;
+    return data?.sub ?? data?.id ?? null;
   } catch {
     return null;
   }
@@ -66,25 +67,42 @@ export default function Friends() {
   const [loading, setLoading] = useState(false);
 
   const [friends, setFriends] = useState<SafeUser[]>([]);
-  const [allUsers, setAllUsers] = useState<SafeUser[]>([]);
+  const [searchResults, setSearchResults] = useState<SafeUser[]>([]);
+  const [searchCursor, setSearchCursor] = useState<string | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [incoming, setIncoming] = useState<IncomingReq[]>([]);
   const [sent, setSent] = useState<SentReq[]>([]);
 
   const [q, setQ] = useState("");
-  const myId = useMemo(() => decodeUserIdFromToken(), []);
+  const [myId, setMyId] = useState<string | null>(() => decodeUserIdFromToken());
+  const [debouncedQ, setDebouncedQ] = useState<string>("");
 
-  const refreshAll = async () => {
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  // keep myId reactive when token changes (login/logout)
+  useEffect(() => {
+    const onToken = () => setMyId(decodeUserIdFromToken());
+    window.addEventListener("auth:token", onToken as any);
+    window.addEventListener("storage", onToken);
+    return () => {
+      window.removeEventListener("auth:token", onToken as any);
+      window.removeEventListener("storage", onToken);
+    };
+  }, []);
+
+  const refreshCore = async () => {
     setLoading(true);
     try {
-      const [friendsRes, usersRes, incomingRes, sentRes] = await Promise.all([
+      const [friendsRes, incomingRes, sentRes] = await Promise.all([
         api.get("/friends/list"),
-        api.get("/users/all"),
         api.get("/friends/requests/incoming"),
         api.get("/friends/requests/sent"),
       ]);
 
       setFriends(friendsRes.data || []);
-      setAllUsers(usersRes.data || []);
       setIncoming(incomingRes.data || []);
       setSent(sentRes.data || []);
     } catch (err: any) {
@@ -94,24 +112,83 @@ export default function Friends() {
     }
   };
 
+  const searchUsersFirstPage = async () => {
+    setSearchLoading(true);
+    try {
+      const res = await api.get("/users/search", {
+        params: { q: debouncedQ, limit: 30 },
+      });
+
+      const items: SafeUser[] = Array.isArray(res.data)
+        ? res.data
+        : (res.data?.items as SafeUser[]) || [];
+
+      const nextCursor: string | null =
+        Array.isArray(res.data) ? null : (res.data?.nextCursor as string | null) ?? null;
+
+      setSearchResults(items || []);
+      setSearchCursor(nextCursor);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không tải được danh sách người dùng");
+      setSearchResults([]);
+      setSearchCursor(null);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const searchUsersNextPage = async () => {
+    if (!searchCursor || searchLoading) return;
+    setSearchLoading(true);
+    try {
+      const res = await api.get("/users/search", {
+        params: { q: debouncedQ, limit: 30, cursor: searchCursor },
+      });
+
+      const items: SafeUser[] = (res.data?.items as SafeUser[]) || [];
+      const nextCursor: string | null = (res.data?.nextCursor as string | null) ?? null;
+
+      setSearchResults((prev) => {
+        const seen = new Set(prev.map((u) => u.id));
+        const merged = [...prev];
+        for (const u of items) {
+          if (!seen.has(u.id)) {
+            merged.push(u);
+            seen.add(u.id);
+          }
+        }
+        return merged;
+      });
+      setSearchCursor(nextCursor);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không tải thêm được");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await refreshCore();
+    if (tab === "find") await searchUsersFirstPage();
+  };
+
   useEffect(() => {
-    refreshAll();
+    refreshCore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (tab === "find") searchUsersFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, debouncedQ, myId]);
 
   const friendIds = useMemo(() => new Set(friends.map((f) => f.id)), [friends]);
   const incomingSenderIds = useMemo(() => new Set(incoming.map((r) => r.senderId)), [incoming]);
   const sentReceiverIds = useMemo(() => new Set(sent.map((r) => r.receiverId)), [sent]);
 
   const filteredUsers = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return (allUsers || [])
-      .filter((u) => (myId ? u.id !== myId : true))
-      .filter((u) => {
-        if (!query) return true;
-        return u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
-      });
-  }, [allUsers, q, myId]);
+    return (searchResults || []).filter((u) => (myId ? u.id !== myId : true));
+  }, [searchResults, myId]);
 
   const sendRequest = async (receiverId: string) => {
     try {
@@ -226,6 +303,10 @@ export default function Friends() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm theo tên hoặc email..." />
           </div>
 
+          <div className="fr-muted" style={{ margin: "8px 2px 0" }}>
+            {searchLoading ? "⏳ Đang tải..." : `Kết quả: ${filteredUsers.length}`}
+          </div>
+
           <div className="fr-grid">
             {filteredUsers.length === 0 ? (
               <div className="fr-card fr-empty">
@@ -275,6 +356,19 @@ export default function Friends() {
               })
             )}
           </div>
+
+          {searchCursor && (
+            <div style={{ display: "flex", justifyContent: "center", margin: "14px 0" }}>
+              <button
+                className="fr-btn fr-btnPrimary"
+                onClick={searchUsersNextPage}
+                disabled={searchLoading}
+                title="Tải thêm"
+              >
+                {searchLoading ? "⏳ Đang tải..." : "Tải thêm"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

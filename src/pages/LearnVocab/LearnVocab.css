@@ -160,6 +160,7 @@
   transform-style: preserve-3d;
   transition: transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
   display: grid;
+  overflow: hidden;
 }
 
 .lv-front {
@@ -174,6 +175,9 @@
   transform: rotateY(180deg);
   align-content: start;
   gap: 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 22px;
 }
 
 .lv-flip.is-flipped .lv-front {
@@ -708,4 +712,158 @@
   .lv-btn--next {
     padding: 10px 12px;
   }
+}
+
+
+
+/* =========================
+   Back card improvements
+   ========================= */
+
+.lv-back-extra {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 12px;
+}
+
+.lv-back-sec-title {
+  font-weight: 1000;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.86);
+  margin-bottom: 6px;
+}
+
+.lv-speed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lv-range {
+  flex: 1;
+  min-width: 140px;
+}
+
+.lv-speed-val {
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--lv-border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.lv-btn.mini {
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.lv-char-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.lv-char-pill {
+  min-width: 54px;
+  padding: 10px 10px 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  text-align: center;
+}
+
+.lv-char-hz {
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 1000;
+}
+
+.lv-char-py {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.lv-usage-input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--lv-border);
+  padding: 10px 12px;
+  outline: none;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.78);
+  resize: vertical;
+}
+
+.lv-usage-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.lv-usage-out {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.lv-usage-zh {
+  font-size: 16px;
+  font-weight: 1000;
+  line-height: 1.4;
+}
+
+.lv-usage-py {
+  margin-top: 6px;
+  opacity: 0.88;
+}
+
+.lv-hl {
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.18);
+  border: 1px solid rgba(34, 197, 94, 0.24);
+}
+
+.lv-pill-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 1000;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+
+/* =========================
+   Mobile stability tweaks
+   - tránh nội dung mặt sau tràn xuống đè phần nhập pinyin
+   - tránh toolbar bị tăng chiều cao do text wrap
+========================= */
+.lv-btn { white-space: nowrap; }
+
+.lv-toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.lv-toolbar::-webkit-scrollbar { display: none; }
+
+@media (max-width: 768px) {
+  .lv-flip { height: clamp(300px, 44vh, 360px); }
+  .lv-btn { padding: 9px 12px; font-size: 13px; }
+  .lv-toolbar { gap: 8px; }
 }

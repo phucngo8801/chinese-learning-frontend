@@ -14,6 +14,24 @@ type LessonsMap = Record<string, LessonItem[]>;
 
 const STORAGE_DONE_KEY = "done_lessons_vi";
 
+function readDoneSet(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_DONE_KEY);
+    const arr = raw ? (JSON.parse(raw) as string[]) : [];
+    return new Set(arr.filter((x) => typeof x === "string" && x.trim()));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function writeDoneSet(set: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_DONE_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // ignore
+  }
+}
+
 export default function Lessons() {
   const navigate = useNavigate();
 
@@ -23,15 +41,7 @@ export default function Lessons() {
   const [activeLevel, setActiveLevel] = useState(levels[0] || "HSK1");
   const [q, setQ] = useState("");
 
-  const doneSet = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_DONE_KEY);
-      const arr = raw ? (JSON.parse(raw) as string[]) : [];
-      return new Set(arr);
-    } catch {
-      return new Set<string>();
-    }
-  }, []);
+  const [doneSet, setDoneSet] = useState<Set<string>>(() => readDoneSet());
 
   const list = lessonMap[activeLevel] || [];
 
@@ -52,18 +62,19 @@ export default function Lessons() {
   };
 
   const markDone = (viText: string) => {
-    try {
-      const raw = localStorage.getItem(STORAGE_DONE_KEY);
-      const arr = raw ? (JSON.parse(raw) as string[]) : [];
-      if (!arr.includes(viText)) arr.push(viText);
-      localStorage.setItem(STORAGE_DONE_KEY, JSON.stringify(arr));
-      window.location.reload();
-    } catch {}
+    const key = (viText || "").trim();
+    if (!key) return;
+    setDoneSet((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      writeDoneSet(next);
+      return next;
+    });
   };
 
   const clearDone = () => {
     localStorage.removeItem(STORAGE_DONE_KEY);
-    window.location.reload();
+    setDoneSet(new Set());
   };
 
   const totalDoneInLevel = list.filter((x) => doneSet.has(x.vi)).length;

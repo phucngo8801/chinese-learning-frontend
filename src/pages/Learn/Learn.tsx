@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import toast from "../../lib/toast";
 import "./Learn.css";
 
 type CharItem = {
@@ -8,10 +10,22 @@ type CharItem = {
   correct: boolean;
 };
 
+type LessonState = {
+  lesson?: {
+    vi: string;
+    zh: string;
+    pinyin: string;
+  };
+};
+
 export default function Learn() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [viText, setViText] = useState("");
   const [chars, setChars] = useState<CharItem[]>([]);
   const [zhText, setZhText] = useState("");
+  const [pinyinText, setPinyinText] = useState("");
   const [spoken, setSpoken] = useState("");
   const [score, setScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,9 +45,36 @@ export default function Learn() {
     setLevel(Math.floor(currentXP / 100) + 1);
   }, []);
 
+  // ✅ support: Lessons -> Learn (pass lesson via navigation state)
+  useEffect(() => {
+    const st = (location.state || {}) as LessonState;
+    const lesson = st?.lesson;
+    if (!lesson) return;
+
+    const vi = (lesson.vi || "").trim();
+    const zh = (lesson.zh || "").trim();
+    const py = (lesson.pinyin || "").trim();
+
+    setViText(vi);
+    setZhText(zh);
+    setPinyinText(py);
+    setChars([]);
+    setSpoken("");
+    setScore(null);
+    setSaved(false);
+    postedRef.current = false;
+
+    // reset timer when we load a new lesson
+    sentenceStartRef.current = Date.now();
+    if (zh) buildChars(zh, py);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
   const buildChars = (zh: string, py: string) => {
     const zhArr = zh.replace(/[^\u4e00-\u9fa5]/g, "").split("");
     const pyArr = py.split(" ");
+
+    setPinyinText(py);
 
     const built: CharItem[] = zhArr.map((char, i) => ({
       char,
@@ -59,13 +100,16 @@ export default function Learn() {
     try {
       const res = await api.post("/translate", { text: clean });
       setZhText(res.data.zh);
+      setPinyinText(res.data.pinyin || "");
 
       // ✅ reset timer khi có câu mới
       sentenceStartRef.current = Date.now();
 
-      buildChars(res.data.zh, res.data.pinyin);
-    } catch {
-      alert("❌ Không dịch được");
+      buildChars(res.data.zh, res.data.pinyin || "");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 429) toast.error("Bạn thao tác quá nhanh. Chờ 1–2 giây rồi thử lại.");
+      else toast.error(err?.response?.data?.message || "Không dịch được");
     } finally {
       setLoading(false);
     }
@@ -94,7 +138,7 @@ export default function Learn() {
       (window as any).webkitSpeechRecognition;
 
     if (!SR) {
-      alert("❌ Trình duyệt không hỗ trợ");
+      toast.error("Trình duyệt không hỗ trợ SpeechRecognition");
       return;
     }
 
@@ -159,6 +203,15 @@ export default function Learn() {
     }
   };
 
+  const canQuiz = useMemo(() => {
+    return !!(viText.trim() && zhText.trim() && pinyinText.trim());
+  }, [viText, zhText, pinyinText]);
+
+  const openQuiz = () => {
+    if (!canQuiz) return;
+    navigate("/quiz", { state: { viText: viText.trim(), zhText: zhText.trim(), pinyin: pinyinText.trim() } });
+  };
+
   return (
     <div className="learn-page">
       <h1>📘 Học tiếng Trung</h1>
@@ -177,6 +230,12 @@ export default function Learn() {
       <button onClick={translateText} disabled={loading}>
         {loading ? "Đang dịch..." : "🔁 Dịch"}
       </button>
+
+      {canQuiz && (
+        <button onClick={openQuiz} style={{ marginLeft: 8 }}>
+          🧠 Làm quiz
+        </button>
+      )}
 
       {chars.length > 0 && (
         <div>

@@ -1,4 +1,6 @@
 import { io, Socket } from "socket.io-client";
+import { getAuthToken } from "./authToken";
+import toast from "./toast";
 
 type ServerToClientEvents = {
   "chat:new": (payload: any) => void;
@@ -27,7 +29,17 @@ type ClientToServerEvents = {
   "chat:join": (payload: { conversationId: string }) => void;
   "chat:leave": (payload: { conversationId: string }) => void;
   // conversationId is preferred (works for both DM + GROUP). otherUserId is a fallback for first-time DM.
-  "chat:send": (payload: { conversationId?: string; otherUserId?: string; text?: string; type?: "TEXT" | "IMAGE" | "FILE"; attachments?: any }) => void;
+  "chat:send": (
+    payload: {
+      conversationId?: string;
+      otherUserId?: string;
+      text?: string;
+      type?: "TEXT" | "IMAGE" | "FILE";
+      attachments?: any;
+      clientMessageId?: string;
+    },
+    cb?: (res: { ok: boolean; conversationId?: string; messageId?: string; error?: string }) => void
+  ) => void;
   "chat:read": (payload: { conversationId: string }) => void;
   "chat:typing": (payload: { conversationId: string; isTyping: boolean }) => void;
 
@@ -39,16 +51,14 @@ type ClientToServerEvents = {
 };
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+let lastHandshakeToken: string | null = null;
+let lastConnectErrorAt = 0;
+let lastConnectErrorMsg = "";
+const SOCKET_TOAST_ID = "socket-conn";
 
 function getToken() {
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
+  return getAuthToken();
 }
-
 function getWsOrigin() {
   const api = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
   return api.replace(/\/api\/?$/, "");
@@ -71,15 +81,28 @@ export function getSocket() {
   });
 
   socket.on("connect", () => {
+    // connection restored
+    toast.dismiss(SOCKET_TOAST_ID);
     try {
       socket?.emit("presence:sync");
     } catch {}
   });
 
   socket.on("connect_error", (err: any) => {
-    console.error("[socket] connect_error:", err?.message || err);
+    const msg = String(err?.message || err || "websocket error");
+    const now = Date.now();
+    // throttle console/toast spam
+    const shouldLog = now - lastConnectErrorAt > 4000 || msg !== lastConnectErrorMsg;
+    if (shouldLog) {
+      console.error("[socket] connect_error:", msg);
+      toast.error("Mất kết nối chat realtime. Đang thử kết nối lại...", { id: SOCKET_TOAST_ID });
+      lastConnectErrorAt = now;
+      lastConnectErrorMsg = msg;
+    }
   });
 
+  // Track handshake token used by this socket instance
+  lastHandshakeToken = getToken() || null;
   return socket;
 }
 
@@ -98,7 +121,15 @@ export function connectSocket() {
     return s;
   }
 
-  if (!s.connected) s.connect();
+  // If token changed while socket is already connected, force reconnect so server re-validates auth.
+  if (token && lastHandshakeToken && token !== lastHandshakeToken) {
+    try {
+      if (s.connected) s.disconnect();
+    } catch {}
+  }
+
+  if (token && !s.connected) s.connect();
+  lastHandshakeToken = token || null;
   return s;
 }
 
@@ -108,4 +139,6 @@ export function disconnectSocket() {
     socket.disconnect();
   } catch {}
   socket = null;
+  lastHandshakeToken = null;
+  toast.dismiss(SOCKET_TOAST_ID);
 }

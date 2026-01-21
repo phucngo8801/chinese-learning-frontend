@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getAuthToken } from "../../lib/authToken";
 import api from "../../api/axios";
 import toast from "../../lib/toast";
 import { useRealtime } from "../../components/realtime/RealtimeProvider";
@@ -28,6 +29,9 @@ type Message = {
   deletedAt?: string | null;
   sender?: UserMini;
   senderDisplayName?: string | null; // nickname or user.name (backend)
+  /** client-side delivery state (optimistic send) */
+  clientStatus?: "queued" | "sending" | "failed";
+  clientError?: string | null;
 };
 
 type Conversation =
@@ -60,14 +64,8 @@ type MemberRow = {
 };
 
 function getToken() {
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
+  return getAuthToken();
 }
-
 function decodeJwtPayload(token: string): any | null {
   if (!token) return null;
   const parts = token.split(".");
@@ -85,6 +83,16 @@ function getMyIdFromToken(): string | null {
   const token = getToken();
   const payload = decodeJwtPayload(token);
   return payload?.sub || payload?.id || null;
+}
+
+function makeClientMessageId(): string {
+  try {
+    // modern browsers
+    return crypto.randomUUID();
+  } catch {
+    // fallback (still unique enough for client retry)
+    return `tmp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  }
 }
 
 const msgText = (m: any) => (m?.content ?? m?.text ?? "").toString();
@@ -311,6 +319,60 @@ export default function Chat() {
   const typingTimer = useRef<number | null>(null);
   const selectedIdRef = useRef<string | null>(null);
 
+  // outbox for optimistic sends (retry on reconnect)
+  const outboxRef = useRef<Record<string, { payload: any; attempts: number }>>({});
+
+  const setMsgStatus = (id: string, status?: Message["clientStatus"], err?: string | null) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? ({ ...m, clientStatus: status, clientError: err ?? null } as any) : m))
+    );
+  };
+
+  const clearOutboxItem = (id: string) => {
+    if (outboxRef.current[id]) delete outboxRef.current[id];
+  };
+
+  const trySendOutboxItem = (id: string) => {
+    const item = outboxRef.current[id];
+    if (!item) return;
+
+    // hard cap to avoid infinite loops
+    if (item.attempts >= 3) {
+      setMsgStatus(id, "failed", "Gửi thất bại (quá nhiều lần thử).");
+      clearOutboxItem(id);
+      return;
+    }
+
+    if (!socket || !(socket as any).connected) {
+      setMsgStatus(id, "queued", null);
+      return;
+    }
+
+    item.attempts += 1;
+    setMsgStatus(id, "sending", null);
+
+    try {
+      socket.emit("chat:send", item.payload, (ack: any) => {
+        if (ack?.ok) {
+          clearOutboxItem(id);
+          // message will be merged/replaced via chat:new; still clear local state early
+          setMsgStatus(id, undefined, null);
+          return;
+        }
+
+        const err = String(ack?.error || "Gửi thất bại");
+        setMsgStatus(id, "failed", err);
+      });
+    } catch (e: any) {
+      setMsgStatus(id, "failed", String(e?.message || "Gửi thất bại"));
+    }
+  };
+
+  const flushOutbox = () => {
+    const ids = Object.keys(outboxRef.current || {});
+    ids.forEach((id) => trySendOutboxItem(id));
+  };
+
   useEffect(() => {
     selectedIdRef.current = selected?.id ?? null;
   }, [selected?.id]);
@@ -473,15 +535,41 @@ export default function Chat() {
   useEffect(() => {
     if (!socket) return;
 
+    const onConnect = () => {
+      try {
+        flushOutbox();
+      } catch {}
+    };
+    socket.on("connect", onConnect);
+
+    const onDisconnect = () => {
+      // mark all pending as queued so user knows it will retry on reconnect
+      try {
+        Object.keys(outboxRef.current || {}).forEach((id) => setMsgStatus(id, "queued", null));
+      } catch {}
+    };
+    socket.on("disconnect", onDisconnect);
+
     const onNew = (payload: any) => {
       const msg = normalizeMessage(payload?.message || payload);
       const selectedId = selectedIdRef.current;
 
       if (selectedId && msg.conversationId === selectedId) {
+        // Merge with optimistic placeholder if exists
         setMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
+          const idx = prev.findIndex((m) => m.id === msg.id);
+          if (idx >= 0) {
+            const copy = prev.slice();
+            copy[idx] = { ...copy[idx], ...msg, clientStatus: undefined, clientError: null } as any;
+            return copy;
+          }
           return [...prev, msg];
         });
+
+        // if this was an optimistic send, clear outbox entry
+        try {
+          if (msg?.id) clearOutboxItem(msg.id);
+        } catch {}
 
         if (myId && msg.senderId !== myId) {
           try {
@@ -665,6 +753,8 @@ export default function Chat() {
     socket.on("chat:conversation_deleted", onConvDeleted);
 
     return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off("chat:new", onNew);
       socket.off("chat:read", onRead);
       socket.off("chat:typing", onTyping);
@@ -762,6 +852,10 @@ export default function Chat() {
 
   const send = async () => {
     if (!selected) return;
+    if (!myId) {
+      toast.error("Bạn chưa đăng nhập");
+      return;
+    }
 
     const trimmed = text.trim();
     const hasText = !!trimmed;
@@ -779,15 +873,41 @@ export default function Chat() {
         type = allImages ? "IMAGE" : "FILE";
       }
 
+      const clientMessageId = makeClientMessageId();
+      const nowIso = new Date().toISOString();
+
+      // optimistic append (so UI feels instant and safe on reconnect)
+      const optimistic = normalizeMessage({
+        id: clientMessageId,
+        conversationId: selected.id,
+        senderId: myId,
+        receiverId: selected.type === "DM" ? selected.otherUser?.id : null,
+        text: hasText ? trimmed : "",
+        content: hasText ? trimmed : "",
+        type,
+        attachments,
+        createdAt: nowIso,
+        isRead: false,
+        clientStatus: socket && (socket as any).connected ? "sending" : "queued",
+        clientError: null,
+      } as any);
+
+      setMessages((prev) => (prev.some((m) => m.id === optimistic.id) ? prev : [...prev, optimistic]));
+
       setText("");
       setPendingFiles([]);
 
-      socket.emit("chat:send", {
+      const payload = {
         conversationId: selected.id,
         text: hasText ? trimmed : undefined,
         type,
         attachments,
-      } as any);
+        clientMessageId,
+      } as any;
+
+      // queue + try send (idempotent via message id)
+      outboxRef.current[clientMessageId] = { payload, attempts: 0 };
+      trySendOutboxItem(clientMessageId);
 
       try {
         socket.emit("chat:typing", { conversationId: selected.id, isTyping: false });
@@ -801,7 +921,32 @@ export default function Chat() {
     }
   };
 
+
+  const retrySend = (m: Message) => {
+    if (!m?.id) return;
+
+    if (!outboxRef.current[m.id]) {
+      // rebuild payload from message snapshot (best-effort)
+      outboxRef.current[m.id] = {
+        attempts: 0,
+        payload: {
+          conversationId: m.conversationId,
+          text: msgText(m) ? msgText(m) : undefined,
+          type: (m.type || "TEXT") as any,
+          attachments: m.attachments || [],
+          clientMessageId: m.id,
+        },
+      };
+    }
+
+    trySendOutboxItem(m.id);
+  };
+
   const startEdit = (m: Message) => {
+    if ((m as any).clientStatus) {
+      toast.error("Tin nhắn chưa gửi xong.");
+      return;
+    }
     setOpenMenuId(null);
     setEditingId(m.id);
     setEditText(msgText(m));
@@ -813,6 +958,10 @@ export default function Chat() {
   };
 
   const saveEdit = async (m: Message) => {
+    if ((m as any).clientStatus) {
+      toast.error("Tin nhắn chưa gửi xong.");
+      return;
+    }
     const newText = editText.trim();
     if (!newText) return;
     try {
@@ -829,6 +978,10 @@ export default function Chat() {
 
   const revokeMsg = async (m: Message) => {
     setOpenMenuId(null);
+    if ((m as any).clientStatus) {
+      toast.error("Tin nhắn chưa gửi xong.");
+      return;
+    }
     try {
       await api.delete(`/chat/messages/${m.id}`);
       setMessages((prev) =>
@@ -841,6 +994,10 @@ export default function Chat() {
 
   const hideMsg = async (m: Message) => {
     setOpenMenuId(null);
+    if ((m as any).clientStatus) {
+      toast.error("Tin nhắn chưa gửi xong.");
+      return;
+    }
     try {
       await api.post(`/chat/messages/${m.id}/hide`);
       setMessages((prev) => prev.filter((x) => x.id !== m.id));
@@ -849,8 +1006,12 @@ export default function Chat() {
     }
   };
 
-  // ✅ FIX: chặn reaction trên tmp_ id (tránh spam 404)
+  // ✅ FIX: chặn action khi tin nhắn chưa có trên server (tránh spam 404)
   const react = async (m: Message, emoji: string) => {
+    if ((m as any).clientStatus) {
+      toast.error("Tin nhắn chưa gửi xong (đang đồng bộ).");
+      return;
+    }
     if (!m?.id || String(m.id).startsWith("tmp_")) {
       toast.error("Tin nhắn chưa có ID từ server (đang đồng bộ).");
       return;
@@ -1278,6 +1439,24 @@ export default function Chat() {
 
                       <div className="meta">
                         <span className="time">{formatTime(m.createdAt)}</span>
+
+                        {mine && (m as any).clientStatus && (
+                          <button
+                            className={`send-state ${(m as any).clientStatus === "failed" ? "failed" : ""}`}
+                            title={(m as any).clientError || ""}
+                            disabled={(m as any).clientStatus === "sending"}
+                            onClick={() => {
+                              if ((m as any).clientStatus === "failed" || (m as any).clientStatus === "queued") retrySend(m);
+                            }}
+                          >
+                            {(m as any).clientStatus === "sending"
+                              ? "Đang gửi…"
+                              : (m as any).clientStatus === "queued"
+                              ? "Đang chờ…"
+                              : "Lỗi • thử lại"}
+                          </button>
+                        )}
+
                         {mine && selected.type === "DM" && (
                           <span className="seen">{m.isRead || m.readAt ? "✓✓" : "✓"}</span>
                         )}

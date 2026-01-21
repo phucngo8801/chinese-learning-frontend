@@ -209,6 +209,24 @@ export default function LearnVocab() {
   const [input, setInput] = useState("");
   const [result, setResult] = useState<CheckResult>(null);
   const [flipped, setFlipped] = useState(false);
+// 🔊 tốc độ nghe (SpeechSynthesis) — lưu localStorage để dùng lại
+const [speechRate, setSpeechRate] = useState<number>(() => {
+  const raw = window.localStorage.getItem("lv_speech_rate");
+  const n = raw ? Number(raw) : 1;
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1.5, Math.max(0.5, n));
+});
+useEffect(() => {
+  try {
+    window.localStorage.setItem("lv_speech_rate", String(speechRate));
+  } catch {}
+}, [speechRate]);
+
+// 🧩 ghép câu mẫu (dịch VN -> ZH + pinyin) ngay trong mặt sau
+const [usageVi, setUsageVi] = useState("");
+const [usageZh, setUsageZh] = useState("");
+const [usagePinyin, setUsagePinyin] = useState("");
+const [usageLoading, setUsageLoading] = useState(false);
 
   // ✅ quản lý timeout an toàn
   const timeoutsRef = useRef<number[]>([]);
@@ -245,6 +263,14 @@ export default function LearnVocab() {
   >([]);
   const [extraTokens, setExtraTokens] = useState<string[]>([]);
 
+const [pronBreakdown, setPronBreakdown] = useState<{
+  correct: number;
+  total: number;
+} | null>(null);
+const [pronMistakes, setPronMistakes] = useState<
+  { index: number; expected: string; got?: string; status: PronTokenStatus }[]
+>([]);
+
   // ✅ tránh spam ghi "đọc sai" nhiều lần cho cùng 1 từ
   const pronWrongLoggedRef = useRef<boolean>(false);
 
@@ -268,6 +294,10 @@ export default function LearnVocab() {
   // ✅ SpeechRecognition
   const recogRef = useRef<any>(null);
   const recTimerRef = useRef<number | null>(null);
+
+const finalizeNowRef = useRef<null | (() => void)>(null);
+const scheduleFinalizeRef = useRef<null | ((ms?: number) => void)>(null);
+const forceFinalizeTimerRef = useRef<number | null>(null);
   const recogHasStartedRef = useRef<boolean>(false);
   const recogStartedAtRef = useRef<number>(0);
   const latestTranscriptRef = useRef<string>("");
@@ -294,6 +324,8 @@ export default function LearnVocab() {
     setPronScore(null);
     setExpectedTokensUI([]);
     setExtraTokens([]);
+    setPronBreakdown(null);
+    setPronMistakes([]);
   };
 
   const resetCardUI = () => {
@@ -392,6 +424,12 @@ export default function LearnVocab() {
     try {
       if (recTimerRef.current) window.clearTimeout(recTimerRef.current);
       recTimerRef.current = null;
+      if (forceFinalizeTimerRef.current)
+        window.clearTimeout(forceFinalizeTimerRef.current);
+      forceFinalizeTimerRef.current = null;
+      finalizeNowRef.current = null;
+      scheduleFinalizeRef.current = null;
+
 
       const r = recogRef.current;
       if (r) {
@@ -579,9 +617,56 @@ export default function LearnVocab() {
     if (!vocab) return;
     const u = new SpeechSynthesisUtterance(vocab.zh);
     u.lang = "zh-CN";
+    u.rate = speechRate;
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
   };
+const translateUsage = async () => {
+  const clean = usageVi.trim();
+  if (!clean) return;
+  if (usageLoading) return;
+
+  setUsageLoading(true);
+  try {
+    const res = await api.post("/translate", { text: clean });
+    setUsageZh(res.data?.zh || "");
+    setUsagePinyin(res.data?.pinyin || "");
+    safeToast(toast.success, "✅ Đã tạo câu luyện tập");
+  } catch (e: any) {
+    safeToast(toast.error, e?.response?.data?.message || "❌ Không dịch được");
+  } finally {
+    setUsageLoading(false);
+  }
+};
+
+const speakUsage = () => {
+  if (!usageZh) return;
+  const u = new SpeechSynthesisUtterance(usageZh);
+  u.lang = "zh-CN";
+  u.rate = speechRate;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+};
+
+const renderHighlightedZh = (s: string) => {
+  if (!vocab?.zh) return s;
+  const needle = vocab.zh.trim();
+  if (!needle) return s;
+  const idx = s.indexOf(needle);
+  if (idx < 0) return s;
+
+  const before = s.slice(0, idx);
+  const mid = s.slice(idx, idx + needle.length);
+  const after = s.slice(idx + needle.length);
+
+  return (
+    <>
+      {before}
+      <span className="lv-hl">{mid}</span>
+      {after}
+    </>
+  );
+};
 
   /**
    * Ghi kết quả học.
@@ -734,9 +819,23 @@ export default function LearnVocab() {
             : ["SpeechRecognition trả về chữ Hán. Hãy nói rõ từng âm tiết theo pinyin."],
         }))
       );
-      setExtraTokens([]);
 
-      savePronAttempt({ vocabId: vocab.id, score, transcript });
+setPronBreakdown({
+  correct: ok ? expectedTokens.length : 0,
+  total: expectedTokens.length,
+});
+setPronMistakes(
+  ok
+    ? []
+    : expectedTokens.map((t, i) => ({
+        index: i + 1,
+        expected: t,
+        got: "…",
+        status: "wrong" as PronTokenStatus,
+      }))
+);
+
+savePronAttempt({ vocabId: vocab.id, score, transcript });
 
       // ✅ nếu phát âm (từ SpeechRecognition) không đạt, tính là "Sai" 1 lần
       if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
@@ -804,9 +903,23 @@ export default function LearnVocab() {
 
     setPronScore(score);
     setExpectedTokensUI(ui);
-    setExtraTokens(extras);
 
-    savePronAttempt({ vocabId: vocab.id, score, transcript });
+setExtraTokens(extras);
+
+setPronBreakdown({ correct: correctCount, total: expectedTokens.length });
+setPronMistakes(
+  ui
+    .map((t, i) => ({ ...t, index: i + 1 }))
+    .filter((t) => t.status !== "correct")
+    .map((t) => ({
+      index: t.index,
+      expected: t.token,
+      got: t.got,
+      status: t.status,
+    }))
+);
+
+savePronAttempt({ vocabId: vocab.id, score, transcript });
 
     // ✅ nếu phát âm không đạt, tính là "Sai" 1 lần (không spam)
     if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
@@ -967,10 +1080,36 @@ export default function LearnVocab() {
     if (!vocab) return;
 
     // toggle
-    if (isRecordingRef.current) {
-      stopRecord();
-      return;
+if (isRecordingRef.current) {
+  // Nếu đang dùng SpeechRecognition: đừng abort ngay (dễ mất transcript).
+  const r = recogRef.current;
+  if (r && !finalizedRef.current) {
+    safeToast(toast, "⏳ Đang chấm phát âm...");
+    try {
+      r.stop?.();
+    } catch {
+      try {
+        r.abort?.();
+      } catch {}
     }
+
+    // đợi SR flush kết quả rồi mới finalize
+    scheduleFinalizeRef.current?.(250);
+
+    if (forceFinalizeTimerRef.current)
+      window.clearTimeout(forceFinalizeTimerRef.current);
+    forceFinalizeTimerRef.current = window.setTimeout(() => {
+      if (isRecordingRef.current && !finalizedRef.current) {
+        finalizeNowRef.current?.();
+      }
+    }, 1200);
+
+    return;
+  }
+
+  stopRecord();
+  return;
+}
 
     const SR =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -1033,6 +1172,11 @@ export default function LearnVocab() {
       if (recTimerRef.current) window.clearTimeout(recTimerRef.current);
       recTimerRef.current = window.setTimeout(() => finalizeNow(), ms);
     };
+
+    // expose finalize helpers (để bấm Dừng không bị mất kết quả)
+    finalizeNowRef.current = finalizeNow;
+    scheduleFinalizeRef.current = scheduleFinalize;
+
 
     recog.onstart = () => {
       recogHasStartedRef.current = true;
@@ -1378,9 +1522,155 @@ export default function LearnVocab() {
                   <div className="lv-label">Nghĩa</div>
                   <div className="lv-value">{vocab.vi}</div>
                 </div>
-                <div className="lv-mini">
-                  Tip: bấm <b>S</b> để nghe • <b>R</b> để luyện nói
+<div className="lv-mini">
+  Tip: bấm <b>S</b> để nghe • <b>R</b> để luyện nói
+</div>
+
+<div
+  className="lv-back-extra"
+  onClick={(e) => e.stopPropagation()}
+  onMouseDown={(e) => e.stopPropagation()}
+>
+  <div className="lv-back-sec">
+    <div className="lv-back-sec-title">🔊 Tốc độ nghe</div>
+    <div className="lv-speed-row">
+      <button
+        className="lv-btn mini"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSpeechRate(0.7);
+        }}
+      >
+        Chậm
+      </button>
+      <button
+        className="lv-btn mini"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSpeechRate(1.0);
+        }}
+      >
+        Chuẩn
+      </button>
+      <button
+        className="lv-btn mini"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSpeechRate(1.25);
+        }}
+      >
+        Nhanh
+      </button>
+
+      <input
+        className="lv-range"
+        type="range"
+        min={0.5}
+        max={1.5}
+        step={0.05}
+        value={speechRate}
+        onChange={(e) => setSpeechRate(Number(e.target.value))}
+      />
+      <div className="lv-speed-val mono">
+        {speechRate.toFixed(2)}x
+      </div>
+    </div>
+    <div className="lv-mini">
+      Tốc độ này áp dụng cho nút 🔊 Nghe và các câu bạn tạo.
+    </div>
+  </div>
+
+  <div className="lv-back-sec">
+    <div className="lv-back-sec-title">🧩 Tách chữ</div>
+    {(() => {
+      const chars = vocab.zh
+        .replace(/\s+/g, "")
+        .split("")
+        .filter(Boolean);
+      const py = vocab.pinyin.trim().split(/\s+/).filter(Boolean);
+      const canMap = chars.length > 0 && chars.length === py.length;
+
+      if (chars.length === 0) {
+        return <div className="lv-mini">Không có dữ liệu</div>;
+      }
+
+      return (
+        <div className="lv-char-grid">
+          {canMap
+            ? chars.map((ch, i) => (
+                <div key={`${ch}-${i}`} className="lv-char-pill">
+                  <div className="lv-char-hz">{ch}</div>
+                  <div className="lv-char-py mono">{py[i]}</div>
                 </div>
+              ))
+            : chars.map((ch, i) => (
+                <div key={`${ch}-${i}`} className="lv-char-pill">
+                  <div className="lv-char-hz">{ch}</div>
+                </div>
+              ))}
+          {!canMap && (
+            <div className="lv-mini">
+              (Không tách pinyin theo từng chữ vì số chữ ≠ số âm tiết.)
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    <div className="lv-mini">
+      Mẹo: nghe chậm rồi đọc từng chữ, sau đó nối lại thành cụm.
+    </div>
+  </div>
+
+  <div className="lv-back-sec">
+    <div className="lv-back-sec-title">✍️ Ghép câu luyện tập</div>
+    <div className="lv-mini">
+      Gõ 1 câu tiếng Việt có chứa nghĩa “{vocab.vi}”, rồi bấm “Tạo câu
+      Trung”.
+    </div>
+
+    <textarea
+      className="lv-usage-input"
+      value={usageVi}
+      onChange={(e) => setUsageVi(e.target.value)}
+      placeholder="Ví dụ: Ngày mai mình gặp mặt nhé"
+      rows={2}
+    />
+
+    <div className="lv-usage-actions">
+      <button
+        className="lv-btn mini"
+        onClick={(e) => {
+          e.stopPropagation();
+          translateUsage();
+        }}
+        disabled={usageLoading || !usageVi.trim()}
+      >
+        {usageLoading ? "Đang dịch..." : "Tạo câu Trung"}
+      </button>
+
+      <button
+        className="lv-btn mini"
+        onClick={(e) => {
+          e.stopPropagation();
+          speakUsage();
+        }}
+        disabled={!usageZh}
+      >
+        🔊 Nghe câu
+      </button>
+    </div>
+
+    {usageZh && (
+      <div className="lv-usage-out">
+        <div className="lv-usage-zh">{renderHighlightedZh(usageZh)}</div>
+        {usagePinyin && (
+          <div className="lv-usage-py mono">{usagePinyin}</div>
+        )}
+      </div>
+    )}
+  </div>
+</div>
               </div>
             </div>
 
@@ -1444,7 +1734,11 @@ export default function LearnVocab() {
             <div className="lv-pron-head">
               <div className="lv-pron-title">🎯 Chấm phát âm</div>
               <div className="lv-pron-score">
-                {pronScore === null ? "—" : `${pronScore}%`}
+                {pronScore === null
+                  ? "—"
+                  : pronBreakdown
+                  ? `${pronScore}% (${pronBreakdown.correct}/${pronBreakdown.total})`
+                  : `${pronScore}%`}
               </div>
             </div>
 
@@ -1471,6 +1765,7 @@ export default function LearnVocab() {
                           : `Bạn nói: ${t.got || ""}`
                       }
                     >
+                      <span className="lv-pill-idx">{idx + 1}</span>
                       {t.token}
                     </span>
                   ))
@@ -1489,9 +1784,43 @@ export default function LearnVocab() {
                   ))}
                 </div>
               </div>
-            )}
 
-            {expectedTokensUI.some((t) => t.status !== "correct") && (
+)}
+
+{pronScore !== null && pronBreakdown && (
+  <div className="lv-pron-row">
+    <div className="lv-pron-label">Giải thích</div>
+    <div className="lv-pron-text">
+      Đúng {pronBreakdown.correct}/{pronBreakdown.total} âm tiết ={" "}
+      <b>{pronScore}%</b>.
+      {pronMistakes.length > 0 ? (
+        <>
+          {" "}
+          Sai ở:{" "}
+          <span className="mono">
+            {pronMistakes
+              .slice(0, 7)
+              .map((m) =>
+                m.status === "missing"
+                  ? `#${m.index} ${m.expected}(thiếu)`
+                  : `#${m.index} ${m.expected}${
+                      m.got ? "→" + m.got : ""
+                    }`
+              )
+              .join(" • ")}
+            {pronMistakes.length > 7
+              ? ` • +${pronMistakes.length - 7}`
+              : ""}
+          </span>
+        </>
+      ) : (
+        <> Bạn đã đọc đúng tất cả.</>
+      )}
+    </div>
+  </div>
+)}
+
+{expectedTokensUI.some((t) => t.status !== "correct") && (
               <div className="lv-pron-tips">
                 <div className="lv-pron-tips-title">Gợi ý sửa</div>
                 <ul>
