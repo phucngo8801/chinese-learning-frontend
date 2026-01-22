@@ -375,6 +375,10 @@ export default function VocabBook() {
             🃏 Học danh sách của tôi
           </button>
 
+          <button className="vb-add-new" onClick={() => nav("/pinyin-lab")}>
+            🔤 Pinyin Lab
+          </button>
+
           <div className="vb-count">
             <span className="vb-count-num">{total}</span>
             <span className="vb-count-text">từ</span>

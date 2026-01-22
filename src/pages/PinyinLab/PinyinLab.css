@@ -1,0 +1,937 @@
+:root {
+  --pl-text: #0f172a;
+  --pl-muted: rgba(15, 23, 42, 0.62);
+  --pl-border: rgba(229, 231, 235, 0.95);
+  --pl-glass: rgba(255, 255, 255, 0.86);
+  --pl-glass-2: rgba(255, 255, 255, 0.92);
+  --pl-primary: #4f46e5;
+}
+
+.pl-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 18px 18px 14px;
+  color: var(--pl-text);
+
+  /* lock page to viewport to avoid whole-page scrolling */
+  height: 100%;
+  max-height: calc(100vh - 18px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pl-header {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.pl-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.pl-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(79, 70, 229, 0.1);
+  border: 1px solid rgba(79, 70, 229, 0.25);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.pl-title h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.pl-muted {
+  color: var(--pl-muted);
+  font-size: 13px;
+}
+
+.pl-voice {
+  background: var(--pl-glass);
+  border: 1px solid var(--pl-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.pl-select {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--pl-border);
+  padding: 10px 12px;
+  background: white;
+}
+
+.pl-tabs {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 14px;
+  flex-wrap: wrap;
+}
+
+.pl-tab {
+  border: 1px solid var(--pl-border);
+  background: white;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.pl-tab.active {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.35);
+}
+
+.pl-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.pl-layout.single {
+  grid-template-columns: 1fr;
+}
+
+.pl-side {
+  border: 1px solid var(--pl-border);
+  border-radius: 16px;
+  background: var(--pl-glass);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pl-search {
+  padding: 8px 6px 10px;
+}
+
+.pl-input {
+  width: 100%;
+  border: 1px solid var(--pl-border);
+  border-radius: 12px;
+  padding: 12px 12px;
+  outline: none;
+  background: white;
+}
+
+.pl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+
+.pl-item {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.pl-item.active {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.pl-item-key {
+  font-weight: 900;
+  font-size: 15px;
+}
+
+.pl-item-label {
+  font-weight: 700;
+}
+
+.pl-summary {
+  margin-top: 10px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.18);
+  padding-top: 10px;
+}
+
+.pl-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pl-card {
+  height: 100%;
+  min-height: 0;
+  border-radius: 16px;
+  border: 1px solid var(--pl-border);
+  background: var(--pl-glass-2);
+  box-shadow: 0 16px 50px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pl-card-head {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 14px;
+  align-items: start;
+  padding: 16px 16px 0;
+}
+
+.pl-card-head-left {
+  min-width: 0;
+}
+
+.pl-play-sound {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.pl-card-title {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pl-card-key {
+  margin-top: 2px;
+}
+
+.pl-card-rate {
+  background: var(--pl-glass-2);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.pl-rate-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pl-rate-val {
+  margin-left: auto;
+  font-weight: 800;
+}
+
+.pl-rate-controls {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 10px;
+}
+
+.pl-chip {
+  border: 1px solid var(--pl-border);
+  background: white;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.pl-rate-slider {
+  width: 100%;
+}
+
+.pl-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0 16px 12px;
+}
+
+.pl-kpi {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.pl-kpi-title {
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.pl-kpi-val {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pl-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.pl-subsection ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.pl-subtitle {
+  font-weight: 900;
+  margin-top: 2px;
+}
+
+.pl-ex-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pl-ex-row {
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.pl-ex-left {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.pl-ex-hanzi {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.pl-ex-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.pl-ex-pinyin {
+  font-weight: 900;
+}
+
+.pl-ex-vi {
+  color: var(--pl-muted);
+  font-size: 13px;
+}
+
+.pl-ex-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.pl-btn {
+  border: 1px solid var(--pl-border);
+  background: white;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.pl-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pl-btn-primary {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.pl-btn-primary:hover {
+  background: rgba(79, 70, 229, 0.14);
+}
+
+.pl-note {
+  margin-top: 8px;
+}
+
+.pl-spoken {
+  margin-top: 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.pl-spoken.ok {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.pl-spoken.bad {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.pl-spoken.warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.pl-section-title {
+  margin-bottom: 12px;
+}
+
+.pl-section-title-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pl-ico {
+  font-size: 18px;
+}
+
+.pl-pairs {
+  display: grid;
+  gap: 10px;
+}
+
+.pl-pair {
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.pl-pair.active {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.pl-pair-title {
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.pl-pair-detail {
+  margin-top: 14px;
+}
+
+.pl-drill-top {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.pl-drill-box {
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.pl-drill-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pl-option {
+  position: relative;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px;
+  cursor: pointer;
+}
+
+.pl-option.active {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.07);
+}
+
+.pl-option-hanzi {
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.pl-option-meta {
+  margin-top: 6px;
+  display: grid;
+  gap: 2px;
+}
+
+.pl-option-pinyin {
+  font-weight: 900;
+}
+
+.pl-mini-btn {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  border: 1px solid var(--pl-border);
+  background: white;
+  padding: 6px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.pl-drill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.pl-input-wrap {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
+  align-items: center;
+}
+
+.pl-score {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.pl-score-head {
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.pl-score-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.pl-pill {
+  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  background: white;
+  font-weight: 800;
+}
+
+.pl-pill.ok {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.pl-pill.bad {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.pl-pill.warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.pl-footer-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+/* Responsive */
+@media (max-width: 980px) {
+  .pl-page {
+    height: auto;
+    min-height: calc(100vh - 12px);
+  }
+  .pl-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pl-header {
+    grid-template-columns: 1fr;
+  }
+  .pl-layout {
+    grid-template-columns: 1fr;
+  }
+  .pl-card-head {
+    grid-template-columns: 1fr;
+  }
+  .pl-list {
+    max-height: 300px;
+  }
+  .pl-drill-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .pl-page {
+    padding: 14px 12px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .pl-tabs {
+    gap: 8px;
+  }
+  .pl-tab {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .pl-side {
+    padding: 10px;
+  }
+  .pl-list {
+    max-height: 240px;
+  }
+
+  .pl-card {
+    border-radius: 16px;
+  }
+
+  .pl-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pl-card-head {
+    gap: 10px;
+  }
+
+  .pl-ex-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .pl-ex-actions {
+    justify-content: flex-start;
+  }
+
+  .pl-rate-controls {
+    flex-wrap: wrap;
+  }
+  .pl-rate-val {
+    margin-left: 0;
+  }
+}
+
+.pl-spoken.pending {
+  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.pl-mic {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.18);
+}
+
+.pl-check {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.pl-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.pl-mic-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Mobile polish v6: tighter header, scrollable tabs, less 'pill', safe bottom padding */
+@media (max-width: 640px) {
+  .pl-page {
+    padding: 12px 10px calc(84px + env(safe-area-inset-bottom));
+    max-height: 100svh;
+  }
+
+  .pl-header { gap: 10px; }
+
+  .pl-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .pl-title { gap: 10px; }
+
+  .pl-title h1 {
+    font-size: 20px;
+    line-height: 1.15;
+  }
+
+  .pl-voice {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .pl-select {
+    margin-top: 6px;
+    padding: 9px 10px;
+    border-radius: 10px;
+  }
+
+  /* Tabs: single row, horizontal scroll */
+  .pl-tabs {
+    margin: 12px 0 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 8px;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pl-tabs::-webkit-scrollbar { display: none; }
+
+  .pl-tab {
+    white-space: nowrap;
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+
+  .pl-layout { gap: 10px; }
+
+  .pl-side {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .pl-search { padding: 6px 4px 8px; }
+
+  .pl-input {
+    padding: 10px 10px;
+    border-radius: 10px;
+  }
+
+  .pl-list {
+    padding: 4px;
+    gap: 6px;
+    max-height: 220px;
+  }
+
+  .pl-item {
+    grid-template-columns: 46px 1fr;
+    padding: 10px 10px;
+    border-radius: 12px;
+  }
+
+  .pl-item-key { font-size: 15px; }
+  .pl-item-label { font-size: 12px; }
+
+  .pl-card { border-radius: 14px; }
+  .pl-card-head { padding: 12px 12px 0; }
+  .pl-card-body { padding: 12px; }
+
+  /* Hide long footer note on mobile to keep viewport clean */
+  .pl-footer-note { display: none; }
+}
+
+/* Mobile compact v7: hide redundant header text, tighten spacing, keep key info visible */
+@media (max-width: 640px) {
+  /* Hide long tagline under title */
+  .pl-header .pl-title .pl-muted { display: none; }
+
+  /* Voice: hide entire selector on mobile to reduce clutter (desktop keeps it) */
+  .pl-voice { display: none; }
+
+  /* Side summary: remove to reduce clutter */
+  .pl-summary { display: none; }
+
+  /* Hide helper line under "Nghe âm" button */
+  .pl-play-sound .pl-muted { display: none; }
+
+  /* Make KPI row compact instead of stacking */
+  .pl-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 12px 10px;
+  }
+  .pl-kpi {
+    padding: 8px 8px;
+    border-radius: 12px;
+  }
+  .pl-kpi-title {
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .pl-kpi-val {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* Tighten card head / rate panels */
+  .pl-card-head {
+    padding: 12px 12px 0;
+    gap: 8px;
+  }
+  .pl-card-title { font-size: 18px; }
+
+  .pl-card-rate {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+  .pl-rate-top { font-size: 13px; }
+  .pl-rate-controls {
+    gap: 6px;
+    margin: 8px 0 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pl-rate-controls::-webkit-scrollbar { display: none; }
+  .pl-chip {
+    padding: 6px 9px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .pl-mic { margin-top: 8px; padding-top: 8px; }
+  .pl-mic-hint { display: none; }
+  .pl-check { font-size: 12px; }
+
+  /* Examples: slightly tighter */
+  .pl-ex-row { padding: 9px 10px; border-radius: 12px; }
+  .pl-ex-left { grid-template-columns: 54px 1fr; gap: 8px; }
+  .pl-ex-hanzi { font-size: 22px; }
+  .pl-ex-actions { gap: 6px; margin-top: 6px; }
+  .pl-btn { padding: 7px 9px; border-radius: 10px; }
+
+  /* Avoid content being covered by bottom nav */
+  .pl-page { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 420px) {
+  .pl-page { padding: 10px 10px calc(104px + env(safe-area-inset-bottom)); }
+  .pl-tab { padding: 7px 9px; font-size: 12px; }
+  .pl-item { padding: 9px 9px; }
+  .pl-input { padding: 9px 10px; }
+}
+
+
+/* Mobile compact v8: cleaner header + segmented tabs (fix tab 'chi ri') */
+@media (max-width: 640px) {
+  /* hide the abc badge to reduce clutter + avoid weird focus ring overlap */
+  .pl-badge { display: none; }
+
+  /* keep header tight */
+  .pl-title { gap: 8px; }
+  .pl-muted { display: none; }
+
+  /* tabs as a segmented control container */
+  .pl-tabs {
+    margin: 10px 0 12px;
+    padding: 6px;
+    border: 1px solid var(--pl-border);
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 14px;
+    gap: 6px;
+  }
+
+  .pl-tab {
+    border: 0;
+    background: transparent;
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .pl-tab.active {
+    border: 0;
+    background: rgba(79, 70, 229, 0.14);
+  }
+
+  /* remove default focus outline that looks like a stray line on mobile */
+  .pl-tab:focus,
+  .pl-tab:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+}
+
+/* Mobile clean v9: keep Pairs/Drill intact, simplify tabs that use the left side list (Âm đầu/Vần/Thanh).
+   CSS-only: target layouts that are NOT `.pl-layout.single` (these tabs render with a side list in TSX). */
+@media (max-width: 640px) {
+  /* Hide mic-speed panel for list-based tabs (kept in Drill tab which uses `.pl-layout.single`). */
+  .pl-layout:not(.single) .pl-mic {
+    display: none;
+  }
+
+  /* Make the left list feel like a compact picker, not a table. */
+  .pl-layout:not(.single) .pl-list {
+    max-height: 220px;
+  }
+
+  .pl-layout:not(.single) .pl-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+
+  /* The label is usually duplicate ("b" / "b"); keep only the key. */
+  .pl-layout:not(.single) .pl-item-label {
+    display: none;
+  }
+
+  .pl-layout:not(.single) .pl-item-key {
+    font-size: 15px;
+    font-weight: 900;
+  }
+
+  /* Keep speed listen controls but make them tighter for list-based tabs. */
+  .pl-layout:not(.single) .pl-card-rate {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .pl-layout:not(.single) .pl-rate-controls {
+    gap: 6px;
+    margin: 8px 0 8px;
+  }
+
+  .pl-layout:not(.single) .pl-chip {
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  /* Reduce visual noise in examples */
+  .pl-layout:not(.single) .pl-ex-row {
+    padding: 9px 10px;
+  }
+  .pl-layout:not(.single) .pl-btn {
+    border-radius: 10px;
+  }
+}

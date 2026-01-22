@@ -9,8 +9,6 @@ import Activity from "../pages/Activity/Activity";
 import LearnVocab from "../pages/LearnVocab/LearnVocab";
 import Lessons from "../pages/Lessons/Lessons";
 import Quiz from "../pages/Quiz/Quiz";
-import Learn from "../pages/Learn/Learn";
-import Notification from "../pages/Notification/Notification";
 import AuthGuard from "../auth/AuthGuard";
 import AppLayout from "../layouts/AppLayout";
 import ToastProvider from "../components/ui/ToastProvider";
@@ -19,6 +17,7 @@ import VocabBook from "../pages/VocabBook/VocabBook";
 import RealtimeProvider from "../components/realtime/RealtimeProvider";
 import Settings from "../pages/Settings/Settings";
 import Chat from "../pages/Chat/Chat";
+import PinyinLab from "../pages/PinyinLab/PinyinLab";
 
 function LearnVocabRoute() {
   const location = useLocation();
@@ -44,7 +43,7 @@ export default function AppRouter() {
             }
           >
             <Route index element={<Navigate to="learn-vocab" replace />} />
-            <Route path="learn" element={<Learn />} />
+            <Route path="learn" element={<Navigate to="/learn-vocab" replace />} />
 
             <Route path="learn-vocab" element={<LearnVocabRoute />} />
             <Route path="vocab-book" element={<VocabBook />} />
@@ -55,10 +54,10 @@ export default function AppRouter() {
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="activity" element={<Activity />} />
 
-            <Route path="notification" element={<Notification />} />
-
             <Route path="settings" element={<Settings />} />
             <Route path="chat" element={<Chat />} />
+
+            <Route path="pinyin-lab" element={<PinyinLab />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/learn-vocab" replace />} />

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Settings.css";
 import { getAppSettings, updateAppSettings } from "../../lib/appSettings";
 import { playTing } from "../../lib/ting";
 
 export default function Settings() {
+  const nav = useNavigate();
   const [s, setS] = useState(() => getAppSettings());
 
   useEffect(() => {
@@ -22,6 +24,18 @@ export default function Settings() {
         </div>
 
         <div className="st-grid">
+          {/* Quick links */}
+          <section className="st-card">
+            <div className="st-cardTitle">🚀 Mở nhanh</div>
+            <div className="st-row">
+              <div className="st-rowText">
+                <div className="st-rowLabel">🔤 Pinyin Lab</div>
+                <div className="st-rowHint">Âm đầu • vần • thanh điệu • cặp dễ nhầm • bài luyện (cố định)</div>
+              </div>
+              <button className="st-btn primary" onClick={() => nav("/pinyin-lab")}>Mở</button>
+            </div>
+          </section>
+
           {/* Notifications */}
           <section className="st-card">
             <div className="st-cardTitle">🔔 Thông báo</div>
