@@ -4,7 +4,14 @@
 
   display: flex;
   width: 100%;
-  min-height: 100dvh;
+
+  /* IMPORTANT: give the flex container a definite height
+     so app-content can scroll internally instead of growing the page */
+  height: 100vh;
+  height: 100dvh;
+
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-layout--mobile {
@@ -23,7 +30,8 @@
 .app-content {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
+    min-height: 0;
+overflow-y: auto;
   background-color: var(--bg-main);
 }
 
