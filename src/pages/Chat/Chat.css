@@ -19,6 +19,27 @@
   --blue2: #3b82f6;
 
   --r: 18px;
+
+  /* --- Tuning for LIGHT UI (deleted messages / popovers) ---
+     Your current screens are light, so revoked messages were nearly invisible.
+     These values keep good contrast on light backgrounds.
+     (If you later move back to a dark theme, we override below.) */
+  --chat-deleted-bg: rgba(17, 24, 39, 0.06);
+  --chat-deleted-border: rgba(17, 24, 39, 0.18);
+  --chat-deleted-text: rgba(17, 24, 39, 0.62);
+
+  --chat-popover-bg: rgba(8, 10, 14, 0.96);
+  --chat-popover-border: rgba(255, 255, 255, 0.14);
+  --chat-popover-shadow: 0 18px 70px rgba(0,0,0,0.45);
+}
+
+/* If user/device prefers dark, keep the original “glass” contrast for deleted messages */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chat-deleted-bg: rgba(255,255,255,0.04);
+    --chat-deleted-border: rgba(255,255,255,0.18);
+    --chat-deleted-text: rgba(255,255,255,0.72);
+  }
 }
 
 /* important shrink fix */
@@ -459,6 +480,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+
+  /* allow floating elements (reaction bar) to layer correctly */
+  position: relative;
 }
 
 /* sender line for GROUP */
@@ -491,9 +515,10 @@
 }
 
 .bubble.deleted {
-  background: rgba(255,255,255,0.04);
-  border: 1px dashed rgba(255,255,255,0.18);
-  color: rgba(255,255,255,0.72);
+  /* revoked message should stay readable on LIGHT backgrounds */
+  background: var(--chat-deleted-bg);
+  border: 1px dashed var(--chat-deleted-border);
+  color: var(--chat-deleted-text);
   font-style: italic;
   box-shadow: none;
 }
@@ -555,15 +580,15 @@
   position: absolute;
   top: 32px;
   right: 8px;
-  z-index: 10;
+  z-index: 50; /* must stay above reaction bar */
 
   min-width: 160px;
   border-radius: 16px;
   overflow: hidden;
 
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(8, 10, 14, 0.96);
-  box-shadow: 0 18px 70px rgba(0,0,0,0.45);
+  border: 1px solid var(--chat-popover-border);
+  background: var(--chat-popover-bg);
+  box-shadow: var(--chat-popover-shadow);
 }
 .msg-menu button {
   width: 100%;
@@ -579,7 +604,13 @@
   background: rgba(255,255,255,0.07);
 }
 
-.deleted-text { padding: 4px 0; }
+.deleted-text {
+  padding: 4px 0;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  color: var(--chat-deleted-text);
+  opacity: 0.92;
+}
 
 /* edit */
 .edit-box input {
@@ -655,6 +686,18 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* keep reactions aligned with the bubble (right for mine, left for others) */
+.msg-row.mine .reaction-summary,
+.msg-row.mine .reaction-picker {
+  justify-content: flex-end;
+  align-self: flex-end;
+}
+.msg-row.other .reaction-summary,
+.msg-row.other .reaction-picker {
+  justify-content: flex-start;
+  align-self: flex-start;
+}
 .reaction-chip {
   font-size: 12px;
   padding: 3px 8px;
@@ -666,16 +709,27 @@
 .reaction-picker {
   display: flex;
   gap: 4px;
-  margin-top: 2px;
+  margin-top: 6px;
 
+  /* float above other elements properly */
+  position: relative;
+  z-index: 1;
+
+  /* show on hover */
   opacity: 0;
-  transform: translateY(-2px);
   pointer-events: none;
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition: opacity 140ms ease;
+
+  /* visual: single pill bar (like Messenger) */
+  width: fit-content;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(8, 10, 14, 0.92);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 .msg-col:hover .reaction-picker {
   opacity: 1;
-  transform: translateY(0);
   pointer-events: auto;
 }
 .reaction-picker button {
@@ -685,11 +739,18 @@
   font-size: 14px;
   cursor: pointer;
 
-  color: var(--text);
-  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.95);
+  background: transparent;
 }
 .reaction-picker button:hover {
-  background: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.14);
+}
+
+/* When the 3-dot menu is open, hide reaction bar to avoid overlapping UI.
+   Uses :has() (modern browsers). If unsupported, it simply won’t apply. */
+.msg-col:has(.msg-menu) .reaction-picker {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* attachments */
