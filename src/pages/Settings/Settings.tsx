@@ -197,6 +197,51 @@ export default function Settings() {
             </div>
           </section>
 
+          {/* Microphone */}
+          <section className="st-card">
+            <div className="st-cardTitle">🎤 Microphone</div>
+
+            <div className="st-row">
+              <div className="st-rowText">
+                <div className="st-rowLabel">Thiết bị thu âm</div>
+                <div className="st-rowHint">Chọn mic để luyện nói/thu âm mượt hơn (ưu tiên tai nghe/headset).</div>
+              </div>
+              <button className="st-btn" type="button" onClick={refreshMics}>
+                Làm mới
+              </button>
+            </div>
+
+            <div className="st-row">
+              <div className="st-rowText">
+                <div className="st-rowLabel">Micro đang dùng</div>
+                <div className="st-rowHint">{micId ? "Đang chọn thiết bị cụ thể" : "Mặc định của hệ thống"}</div>
+              </div>
+
+              <select
+                className="st-select"
+                value={micId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setMicId(id);
+                  setPreferredMicId(id);
+                }}
+              >
+                <option value="">Mặc định</option>
+                {micDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Micro ${String(d.deviceId).slice(0, 8)}…`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!micDevices.length ? (
+              <div className="st-rowHint" style={{ marginTop: 8 }}>
+                Nếu danh sách trống hoặc không hiện tên thiết bị: bấm “Làm mới” và cho phép quyền Microphone trên trình duyệt.
+              </div>
+            ) : null}
+          </section>
+
           {/* Chat */}
           <section className="st-card">
             <div className="st-cardTitle">💬 Chat</div>

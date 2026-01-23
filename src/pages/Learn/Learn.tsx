@@ -299,6 +299,58 @@ export default function Learn() {
     void startListening();
   };
 
+
+  const compare = async (spokenText: string) => {
+      setSpoken(spokenText);
+      const spokenArr = spokenText.replace(/[^\u4e00-\u9fa5]/g, "").split("");
+
+      let correctCount = 0;
+
+      const updated = chars.map((c) => {
+        const ok = spokenArr.includes(c.char);
+        if (ok) correctCount++;
+        return { ...c, correct: ok };
+      });
+
+      const finalScore = Math.round(
+        (correctCount / Math.max(chars.length, 1)) * 100
+      );
+
+      setChars(updated);
+      setScore(finalScore);
+
+      // ✅ log study event (chỉ log 1 lần cho mỗi câu)
+      if (!postedRef.current && chars.length > 0) {
+        postedRef.current = true;
+
+        const durationSec = Math.max(
+          1,
+          Math.round((Date.now() - sentenceStartRef.current) / 1000)
+        );
+
+        const correct = finalScore >= 60;
+
+        try {
+          await api.post("/study/event", {
+            type: "sentence",
+            itemId: zhText ? String(zhText).slice(0, 200) : "sentence",
+            correct,
+            durationSec,
+          });
+        } catch (e) {
+          console.warn("POST /study/event failed (sentence)", e);
+        }
+      }
+
+      if (finalScore >= 60 && !saved) {
+        const newXP = xp + 10;
+        localStorage.setItem("xp", String(newXP));
+        setXp(newXP);
+        setLevel(Math.floor(newXP / 100) + 1);
+        setSaved(true);
+      }
+    };
+
   const canQuiz = useMemo(() => {
     return !!(viText.trim() && zhText.trim() && pinyinText.trim());
   }, [viText, zhText, pinyinText]);
@@ -356,8 +408,4 @@ export default function Learn() {
       {spoken && <p>Điểm: {score}%</p>}
     </div>
   );
-}
-
-function compare(t: string) {
-  throw new Error("Function not implemented.");
 }

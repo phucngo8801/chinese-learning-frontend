@@ -990,6 +990,8 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
           const buf = new Uint8Array(analyser.fftSize);
           const threshold = 0.02;
           const silenceMs = 1200;
+          let lastTick = 0;
+
 
           const tick = () => {
             const nowPerf = typeof performance !== "undefined" ? performance.now() : Date.now();
