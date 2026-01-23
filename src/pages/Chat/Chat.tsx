@@ -299,6 +299,17 @@ export default function Chat() {
   const [atBottom, setAtBottom] = useState(true);
 
   const [openNew, setOpenNew] = useState(false);
+  const [openNickname, setOpenNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
+  const nicknameInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (openNickname) {
+      window.setTimeout(() => nicknameInputRef.current?.focus(), 0);
+    }
+  }, [openNickname]);
+
   const [newTab, setNewTab] = useState<"DM" | "GROUP">("DM");
   const [friends, setFriends] = useState<FriendMini[]>([]);
   const [friendQuery, setFriendQuery] = useState("");
@@ -551,7 +562,16 @@ export default function Chat() {
     socket.on("disconnect", onDisconnect);
 
     const onNew = (payload: any) => {
-      const msg = normalizeMessage(payload?.message || payload);
+      const raw = payload?.message ?? payload;
+      // Ignore non-message payloads (e.g. REACTIONS/EDIT/DELETE updates mistakenly sent via chat:new)
+      const convId = raw?.conversationId ?? payload?.conversationId;
+      const hasId = Boolean(raw?.id || raw?.clientMessageId);
+      const hasText = Boolean(String(raw?.text ?? raw?.content ?? "").trim());
+      const hasAttachments = Array.isArray(raw?.attachments) && raw.attachments.length > 0;
+      const isSystem = String(raw?.type || "") === "SYSTEM";
+      if (!hasId || !convId || (!hasText && !hasAttachments && !isSystem)) return;
+
+      const msg = normalizeMessage({ ...raw, conversationId: convId });
       const selectedId = selectedIdRef.current;
 
       if (selectedId && msg.conversationId === selectedId) {
@@ -1116,18 +1136,32 @@ export default function Chat() {
     }
   };
 
+  const closeNicknameModal = () => {
+    setSavingNickname(false);
+    setOpenNickname(false);
+  };
+
+  const saveNickname = async () => {
+    if (!selected || selected.type !== "DM") return;
+    if (savingNickname) return;
+    setSavingNickname(true);
+    try {
+      await api.patch(`/chat/conversations/${selected.id}/nickname`, { nickname: nicknameDraft.trim() });
+      toast.success("Đã cập nhật biệt danh");
+      setOpenNickname(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Cập nhật biệt danh thất bại");
+    } finally {
+      setSavingNickname(false);
+    }
+  };
+
   const groupActions = async () => {
     if (!selected) return;
 
     if (selected.type === "DM") {
-      const nickname = window.prompt("Biệt danh của bạn trong cuộc chat này (để trống để xóa):", "");
-      if (nickname === null) return;
-      try {
-        await api.patch(`/chat/conversations/${selected.id}/nickname`, { nickname });
-        toast.success("Đã lưu biệt danh");
-      } catch (e: any) {
-        toast.error(e?.response?.data?.message || "Lưu biệt danh thất bại");
-      }
+      setNicknameDraft("");
+      setOpenNickname(true);
       return;
     }
 
@@ -1600,6 +1634,49 @@ export default function Chat() {
                   Tạo nhóm
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openNickname && selected?.type === "DM" && (
+        <div
+          className="chat-modal"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeNicknameModal();
+          }}
+        >
+          <div className="chat-modal-card" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="chat-modal-head">
+              <div className="chat-modal-title">Đổi biệt danh</div>
+              <button className="icon-btn" onClick={closeNicknameModal} aria-label="close">
+                ✕
+              </button>
+            </div>
+
+            <div className="chat-modal-body">
+              <div className="action-hint">Biệt danh của bạn trong cuộc chat này (để trống để xóa).</div>
+              <div className="chat-modal-groupTitle">
+                <input
+                  ref={nicknameInputRef}
+                  value={nicknameDraft}
+                  onChange={(e) => setNicknameDraft(e.target.value)}
+                  placeholder="Nhập biệt danh…"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveNickname();
+                    if (e.key === "Escape") closeNicknameModal();
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="chat-modal-foot">
+              <button className="btn" onClick={closeNicknameModal} disabled={savingNickname}>
+                Hủy
+              </button>
+              <button className="btn primary" onClick={saveNickname} disabled={savingNickname}>
+                {savingNickname ? "Đang lưu…" : "Lưu"}
+              </button>
             </div>
           </div>
         </div>
