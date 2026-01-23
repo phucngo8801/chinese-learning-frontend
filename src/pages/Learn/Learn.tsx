@@ -357,3 +357,7 @@ export default function Learn() {
     </div>
   );
 }
+
+function compare(t: string) {
+  throw new Error("Function not implemented.");
+}
