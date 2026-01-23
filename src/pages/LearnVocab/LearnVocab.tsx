@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../api/axios";
 import toast from "../../lib/toast";
+import { buildAudioConstraints } from "../../lib/mic";
 import "./LearnVocab.css";
 import { bumpDaily, getDailyStats, savePronAttempt } from "../../lib/vocabLocal";
 
@@ -968,7 +969,7 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
     audioChunksRef.current = [];
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints() as any });
       mediaStreamRef.current = stream;
 
       const mimeType = pickAudioMimeType();
@@ -991,6 +992,12 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
           const silenceMs = 1200;
 
           const tick = () => {
+            const nowPerf = typeof performance !== "undefined" ? performance.now() : Date.now();
+            if (nowPerf - lastTick < 60) {
+              rafRef.current = requestAnimationFrame(tick);
+              return;
+            }
+            lastTick = nowPerf;
             if (!isRecordingRef.current) return;
 
             analyser.getByteTimeDomainData(buf);
@@ -1123,7 +1130,7 @@ if (isRecordingRef.current) {
     // Ask mic permission explicitly (prevents instant not-allowed/audio-capture on some devices)
     try {
       if (navigator.mediaDevices?.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints() as any });
         stream.getTracks().forEach((t) => t.stop());
       }
     } catch {
@@ -1145,8 +1152,9 @@ if (isRecordingRef.current) {
     // zh-CN: nhận dạng tiếng Trung
     recog.lang = "zh-CN";
 
-    // continuous=true hay bị stop/lỗi trên mobile; để false ổn định hơn
-    recog.continuous = false;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // continuous mượt hơn trên desktop; trên mobile đôi khi bị stop/lỗi
+    recog.continuous = !isMobile;
     recog.interimResults = true;
     recog.maxAlternatives = 5;
 

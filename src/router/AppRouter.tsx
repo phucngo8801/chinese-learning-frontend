@@ -18,6 +18,8 @@ import RealtimeProvider from "../components/realtime/RealtimeProvider";
 import Settings from "../pages/Settings/Settings";
 import Chat from "../pages/Chat/Chat";
 import PinyinLab from "../pages/PinyinLab/PinyinLab";
+import Notification from "../pages/Notification/Notification";
+import HanziWorld from "../pages/HanziWorld/HanziWorld";
 
 function LearnVocabRoute() {
   const location = useLocation();
@@ -54,8 +56,12 @@ export default function AppRouter() {
             <Route path="leaderboard" element={<Leaderboard />} />
             <Route path="activity" element={<Activity />} />
 
+            <Route path="notification" element={<Notification />} />
+
             <Route path="settings" element={<Settings />} />
             <Route path="chat" element={<Chat />} />
+
+            <Route path="hanzi-world" element={<HanziWorld />} />
 
             <Route path="pinyin-lab" element={<PinyinLab />} />
           </Route>

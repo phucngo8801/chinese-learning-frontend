@@ -217,12 +217,14 @@ export default function Sidebar({ isMobile, mobileOpen, onMobileClose }: Sidebar
   // Học / Sổ / Bạn / Chat, so the drawer only keeps what's not on the tab bar.
   const NAV_MAIN_DESKTOP: NavItem[] = [
     { to: "/learn-vocab", label: "Học từ vựng", icon: "📖" },
+    { to: "/hanzi-world", label: "Đọc & Chơi", icon: "📚" },
     { to: "/vocab-book", label: "Sổ từ vựng", icon: "📒" },
     { to: "/friends", label: "Bạn bè", icon: "👥" },
     { to: "/settings", label: "Cài đặt", icon: "⚙️" },
   ];
 
   const NAV_MAIN_MOBILE: NavItem[] = [
+    { to: "/hanzi-world", label: "Đọc & Chơi", icon: "📚" },
     { to: "/settings", label: "Cài đặt", icon: "⚙️" },
   ];
 

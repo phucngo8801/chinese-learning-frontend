@@ -3,13 +3,36 @@ import { useNavigate } from "react-router-dom";
 import "./Settings.css";
 import { getAppSettings, updateAppSettings } from "../../lib/appSettings";
 import { playTing } from "../../lib/ting";
+import { ensureMicPermission, getPreferredMicId, listAudioInputs, setPreferredMicId } from "../../lib/mic";
 
 export default function Settings() {
   const nav = useNavigate();
   const [s, setS] = useState(() => getAppSettings());
+  const [micId, setMicId] = useState(() => getPreferredMicId());
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
 
   useEffect(() => {
     setS(getAppSettings());
+  }, []);
+
+  const refreshMics = async () => {
+    try {
+      await ensureMicPermission();
+      const list = await listAudioInputs();
+      // If device labels are empty, user likely denied permission.
+      setMicDevices(list);
+    } catch {
+      setMicDevices([]);
+    }
+  };
+
+  useEffect(() => {
+    refreshMics();
+
+    const onDevice = () => setMicId(getPreferredMicId());
+    window.addEventListener("mic:device", onDevice);
+    return () => window.removeEventListener("mic:device", onDevice);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

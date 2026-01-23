@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./PinyinLab.css";
 import toast from "../../lib/toast";
+import { buildAudioConstraints } from "../../lib/mic";
 import {
   PINYIN_FINALS,
   PINYIN_INITIALS,
@@ -148,15 +149,26 @@ function useSpeechOnce() {
     const minListenMs = Math.max(600, opts.minListenMs ?? 1200);
     const graceMs = Math.max(0, opts.graceMs ?? 650);
 
+    // Best-effort: request mic permission (labels + fewer instant SR failures)
+    try {
+      navigator.mediaDevices?.getUserMedia?.({ audio: buildAudioConstraints() as any })
+        .then((s) => s.getTracks().forEach((t) => t.stop()))
+        .catch(() => {});
+    } catch {
+      // ignore
+    }
+
     try {
       const rec = new Ctor();
       recRef.current = rec;
-      rec.continuous = false;
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      rec.continuous = !isMobile;
       rec.interimResults = opts.interimResults !== false; // default true
       rec.maxAlternatives = 5;
       rec.lang = opts.lang || "zh-CN";
 
             let lastText = "";
+      let lastPartialEmit = 0;
       let resolved = false;
       let hadError = false;
       const startedAt = Date.now();
@@ -220,7 +232,11 @@ function useSpeechOnce() {
           const text = String(t || "").trim();
           if (text) {
             lastText = text;
+            const now = Date.now();
+          if (now - lastPartialEmit > 120) {
+            lastPartialEmit = now;
             opts.onPartial?.(text);
+          }
             armSilenceStop();
           }
         } catch {
