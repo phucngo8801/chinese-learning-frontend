@@ -58,3 +58,22 @@
   margin-bottom: 12px;
   text-align: center;
 }
+
+.login-footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.login-link {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.login-link:hover {
+  text-decoration: underline;
+}

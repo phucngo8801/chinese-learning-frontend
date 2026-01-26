@@ -689,7 +689,16 @@
   .lv-toolbar-left,
   .lv-toolbar-right {
     gap: 8px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+  }
+
+  /* Grade buttons can be 4 items; keep them compact on mobile */
+  .lv-btn--wrong,
+  .lv-btn--hard,
+  .lv-btn--good,
+  .lv-btn--easy {
+    padding: 9px 10px;
+    font-size: 12px;
   }
 
   /* Tap card để lật => ẩn nút Lật cho gọn */

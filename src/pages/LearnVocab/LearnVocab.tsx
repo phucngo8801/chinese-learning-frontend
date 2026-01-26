@@ -5,7 +5,13 @@ import api from "../../api/axios";
 import toast from "../../lib/toast";
 import { buildAudioConstraints } from "../../lib/mic";
 import "./LearnVocab.css";
-import { bumpDaily, getDailyStats, savePronAttempt } from "../../lib/vocabLocal";
+import {
+  bumpDaily,
+  getDailyStats,
+  normalizeMode,
+  savePronAttempt,
+} from "../../lib/vocabLocal";
+import type { Mode } from "../../lib/vocabLocal";
 
 type Vocab = {
   id: number;
@@ -136,8 +142,6 @@ function tipsForSyllable(expected: string, got?: string) {
   return tips;
 }
 
-type Mode = "random" | "selected";
-
 type CatalogItem = {
   id: number;
   zh: string;
@@ -151,6 +155,32 @@ type CatalogResponse = {
   limit: number;
   total: number;
   items: CatalogItem[];
+};
+
+type TodaySummary = {
+  dateKey: string;
+  goalMinutes: number;
+  minutesToday: number;
+  progressPct: number;
+  dueVocabCount: number;
+  vocabCorrect: number;
+  vocabWrong: number;
+  sentenceTotal: number;
+  sentenceCorrect: number;
+  sentenceWrong: number;
+};
+
+type WeekSummary = {
+  days: number;
+  series: {
+    dateKey: string;
+    minutes: number;
+    vocabCorrect: number;
+    vocabWrong: number;
+    sentenceTotal: number;
+    sentenceCorrect: number;
+    sentenceWrong: number;
+  }[];
 };
 
 async function fetchAllSelected(): Promise<CatalogItem[]> {
@@ -196,7 +226,7 @@ export default function LearnVocab() {
   };
 
   const modeParam = (searchParams.get("mode") || "random").toLowerCase();
-  const mode: Mode = modeParam === "selected" ? "selected" : "random";
+  const mode: Mode = normalizeMode(modeParam);
 
   const rawFocusId = searchParams.get("focusId");
   const focusId = rawFocusId ? Number(rawFocusId) : null;
@@ -256,6 +286,72 @@ const [usageLoading, setUsageLoading] = useState(false);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
+  // ✅ server summary (goal + due count) + week mini chart
+  const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
+  const [weekSummary, setWeekSummary] = useState<WeekSummary | null>(null);
+
+  const refreshTodaySummary = async () => {
+    try {
+      const res = await api.get("/study/summary/today");
+      if (!mountedRef.current) return;
+      if (res.data?.ok) setTodaySummary(res.data as TodaySummary);
+    } catch {}
+  };
+
+  const refreshWeekSummary = async () => {
+    try {
+      const res = await api.get("/study/summary/week");
+      if (!mountedRef.current) return;
+      if (res.data?.ok) setWeekSummary(res.data as WeekSummary);
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshTodaySummary();
+    refreshWeekSummary();
+
+    const onFocus = () => {
+      refreshTodaySummary();
+      refreshWeekSummary();
+      refreshReviewMeta();
+    };
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // review queue refs
+  const reviewQueueRef = useRef<Vocab[]>([]);
+  const reviewIndexRef = useRef<number>(0);
+  const [reviewRemaining, setReviewRemaining] = useState(0);
+
+  const setReviewRemainingFromRef = () => {
+    const remain = Math.max(0, reviewQueueRef.current.length - reviewIndexRef.current);
+    setReviewRemaining(remain);
+  };
+
+  const fetchReviewQueue = async (limit = 30) => {
+    const res = await api.get("/vocab/review/queue", { params: { limit } });
+    return res.data as { ok: boolean; dueCount: number; nextUpAt: string | null; items: Vocab[] };
+  };
+
+  const [reviewMeta, setReviewMeta] = useState<{ dueCount: number; nextUpAt: string | null } | null>(null);
+
+  const refreshReviewMeta = async () => {
+    try {
+      // limit=1 is enough to get dueCount/nextUpAt with minimal payload
+      const q = await fetchReviewQueue(1);
+      if (!mountedRef.current) return;
+      if (q?.ok) setReviewMeta({ dueCount: Number(q.dueCount || 0), nextUpAt: q.nextUpAt ?? null });
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshReviewMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // pron
   const [spokenText, setSpokenText] = useState<string>("");
   const [pronScore, setPronScore] = useState<number | null>(null);
@@ -285,7 +381,7 @@ const [pronMistakes, setPronMistakes] = useState<
     }
     safeToast(
       toast.error,
-      `🔒 Chưa đạt: ${pronScore}%. Cần >= ${PASS_PRON_SCORE}% để bấm Đúng.`
+      `🔒 Chưa đạt: ${pronScore}%. Cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ.`
     );
   };
 
@@ -541,6 +637,30 @@ const forceFinalizeTimerRef = useRef<number | null>(null);
       setLoading(true);
       resetCardUI();
 
+      if (mode === "review") {
+        // Ensure queue exists
+        if (
+          reviewQueueRef.current.length === 0 ||
+          reviewIndexRef.current >= reviewQueueRef.current.length
+        ) {
+          const q = await fetchReviewQueue(60);
+          reviewQueueRef.current = (q.items || []) as any;
+          reviewIndexRef.current = 0;
+          setReviewRemainingFromRef();
+        }
+
+        const cur = reviewQueueRef.current[reviewIndexRef.current] || null;
+        if (!cur) {
+          setVocab(null);
+          safeToast(toast, "Hôm nay không có từ cần ôn.");
+          return;
+        }
+
+        setVocab(cur);
+        focusInput();
+        return;
+      }
+
       if (mode === "selected") {
         if (selectedList.length === 0) {
           await loadSelectedFirstTime();
@@ -596,6 +716,11 @@ const forceFinalizeTimerRef = useRef<number | null>(null);
       setDoneCountFromRef();
       selectedIndexRef.current = 0;
     }
+
+    // reset review queue whenever mode changes
+    reviewQueueRef.current = [];
+    reviewIndexRef.current = 0;
+    setReviewRemaining(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeParam, rawFocusId]);
 
@@ -674,18 +799,75 @@ const renderHighlightedZh = (s: string) => {
    * - Mặc định: durationSec = thời gian từ lúc load thẻ (>= 1)
    * - Dùng override = 0 cho các event không muốn cộng phút/streak (vd: chấm phát âm sai)
    */
-  const postResult = async (correct: boolean, durationSecOverride?: number) => {
-    if (!vocab) return;
+  // grade: 0=again, 1=hard, 2=good, 3=easy
+  const postResult = async (
+    vocabId: number,
+    grade: 0 | 1 | 2 | 3,
+    durationSecOverride?: number
+  ) => {
     const durationSec =
       typeof durationSecOverride === "number"
         ? Math.max(0, Math.round(durationSecOverride))
         : Math.max(1, Math.round((Date.now() - cardStartRef.current) / 1000));
 
-    await api.post("/vocab/result", { vocabId: vocab.id, correct, durationSec });
+    // Backward-compatible: send both grade + correct.
+    await api.post("/vocab/result", {
+      vocabId,
+      grade,
+      correct: grade > 0,
+      durationSec,
+    });
+  };
+
+  const nextReviewCard = () => {
+    // Move within the already fetched queue
+    reviewIndexRef.current = reviewIndexRef.current + 1;
+    setReviewRemainingFromRef();
+
+    const next = reviewQueueRef.current[reviewIndexRef.current] || null;
+    if (!next) {
+      setVocab(null);
+      safeToast(toast.success, "✅ Đã ôn xong danh sách hôm nay!");
+      // due count may change after finishing
+      refreshTodaySummary();
+      refreshReviewMeta();
+      return;
+    }
+
+    resetCardUI();
+    setVocab(next);
+    focusInput();
+  };
+
+  const reloadReviewQueue = async () => {
+    try {
+      setLoading(true);
+      resetCardUI();
+      const q = await fetchReviewQueue(60);
+      reviewQueueRef.current = (q.items || []) as any;
+      reviewIndexRef.current = 0;
+      setReviewRemainingFromRef();
+      const first = reviewQueueRef.current[0] || null;
+      setVocab(first);
+      if (!first) safeToast(toast, "Hôm nay không có từ cần ôn.");
+      refreshTodaySummary();
+      refreshReviewMeta();
+      focusInput();
+    } catch {
+      safeToast(toast.error, "❌ Không tải được danh sách ôn.");
+    } finally {
+      mountedRef.current && setLoading(false);
+    }
   };
 
   const afterCorrect = () => {
     setCompleted(true);
+
+    if (mode === "review") {
+      safeToast(toast.success, "✅ Đã lưu kết quả ôn tập!");
+      if (autoNext) safeTimeout(() => nextReviewCard(), 350);
+      return;
+    }
 
     if (mode === "selected" && vocab) {
       doneSetRef.current.add(vocab.id);
@@ -730,17 +912,39 @@ const renderHighlightedZh = (s: string) => {
     if (!vocab || posting) return;
 
     const ok = normForCompare(input) === normForCompare(vocab.pinyin);
-    setResult(ok ? "correct" : "wrong");
+    await submitGrade(ok ? 2 : 0);
+  };
+
+  const submitGrade = async (grade: 0 | 1 | 2 | 3) => {
+    const cur = vocab;
+    if (!cur || posting) return;
+    const isCorrect = grade > 0;
+    setResult(isCorrect ? "correct" : "wrong");
 
     try {
       setPosting(true);
-      await postResult(ok);
+      await postResult(cur.id, grade);
 
       if (!mountedRef.current) return;
-      setTodayStats(bumpDaily({ vocabId: vocab.id, correct: ok, mode }));
+      setTodayStats(bumpDaily({ vocabId: cur.id, correct: isCorrect, mode }));
+      refreshTodaySummary();
+      refreshWeekSummary();
+      refreshReviewMeta();
 
-      if (ok) afterCorrect();
-      else safeToast(toast.error, "❌ Sai! (đã lưu)");
+      if (isCorrect) {
+        afterCorrect();
+        return;
+      }
+
+      // Wrong / Again
+      safeToast(toast.error, "❌ Đã lưu (AGAIN)");
+
+      // Review mode: re-queue the current card so users can see it again later
+      if (mode === "review") {
+        reviewQueueRef.current.push(cur);
+        setReviewRemainingFromRef();
+        if (autoNext) safeTimeout(() => nextReviewCard(), 350);
+      }
     } catch (e) {
       console.error(e);
       safeToast(toast.error, "❌ Ghi kết quả thất bại (POST /vocab/result).");
@@ -750,50 +954,23 @@ const renderHighlightedZh = (s: string) => {
   };
 
   // ✅ “Đúng” chỉ cho bấm khi pronScore >= 75
-  const markCorrect = async () => {
-    if (!vocab || posting) return;
-
-    if (!canPassPron) {
-      explainLocked();
-      return;
-    }
-
-    setResult("correct");
-
-    try {
-      setPosting(true);
-      await postResult(true);
-
-      if (!mountedRef.current) return;
-      setTodayStats(bumpDaily({ vocabId: vocab.id, correct: true, mode }));
-
-      afterCorrect();
-    } catch (e) {
-      console.error(e);
-      safeToast(toast.error, "❌ Ghi kết quả thất bại.");
-    } finally {
-      mountedRef.current && setPosting(false);
-    }
+  const markEasy = async () => {
+    if (!canPassPron) return explainLocked();
+    await submitGrade(3);
   };
 
-  const markWrong = async () => {
-    if (!vocab || posting) return;
-    setResult("wrong");
+  const markGood = async () => {
+    if (!canPassPron) return explainLocked();
+    await submitGrade(2);
+  };
 
-    try {
-      setPosting(true);
-      await postResult(false);
+  const markHard = async () => {
+    if (!canPassPron) return explainLocked();
+    await submitGrade(1);
+  };
 
-      if (!mountedRef.current) return;
-      setTodayStats(bumpDaily({ vocabId: vocab.id, correct: false, mode }));
-
-      safeToast(toast.error, "❌ Đánh dấu SAI (đã lưu)");
-    } catch (e) {
-      console.error(e);
-      safeToast(toast.error, "❌ Ghi kết quả thất bại.");
-    } finally {
-      mountedRef.current && setPosting(false);
-    }
+  const markAgain = async () => {
+    await submitGrade(0);
   };
 
   const buildPronFeedback = (transcript: string) => {
@@ -845,15 +1022,15 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
         if (mountedRef.current)
           setTodayStats(bumpDaily({ vocabId: vocab.id, correct: false, mode }));
         // không cộng phút/streak
-        postResult(false, 0).catch(() => void 0);
+        postResult(vocab.id, 0, 0).catch(() => void 0);
       }
 
       if (score >= PASS_PRON_SCORE) {
-        safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa nút Đúng`);
+        safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa Hard/Tốt/Dễ`);
       } else {
         safeToast(
           toast.error,
-          `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để bấm Đúng`
+          `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`
         );
       }
       return;
@@ -929,15 +1106,15 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
       if (mountedRef.current)
         setTodayStats(bumpDaily({ vocabId: vocab.id, correct: false, mode }));
       // không cộng phút/streak
-      postResult(false, 0).catch(() => void 0);
+      postResult(vocab.id, 0, 0).catch(() => void 0);
     }
 
     if (score >= PASS_PRON_SCORE) {
-      safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa nút Đúng`);
+        safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa Hard/Tốt/Dễ`);
     } else {
       safeToast(
         toast.error,
-        `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để bấm Đúng`
+          `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`
       );
     }
   };
@@ -1339,7 +1516,22 @@ if (isRecordingRef.current) {
 
   const goRandom = () => nav("/learn-vocab");
   const goSelected = () => nav("/learn-vocab?mode=selected");
+  const goReview = () => nav("/learn-vocab?mode=review");
   const goBackBook = () => nav("/vocab-book");
+
+  const dueForReview = todaySummary?.dueVocabCount ?? reviewMeta?.dueCount ?? 0;
+  const nextUpAt = reviewMeta?.nextUpAt ?? null;
+
+  const formatDateTime = (iso: string) => {
+    try {
+      return new Intl.DateTimeFormat("vi-VN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
 
   // Hotkeys
   useEffect(() => {
@@ -1354,9 +1546,19 @@ if (isRecordingRef.current) {
       if (e.key.toLowerCase() === "s" && FEATURES.speak) speak();
       if (e.key.toLowerCase() === "r" && FEATURES.record) record();
 
+      // Grade shortcuts (SRS): 1=Again, 2=Hard, 3=Good, 4=Easy
+      if (FEATURES.markButtons) {
+        if (e.key === "1") markAgain();
+        if (e.key === "2") markHard();
+        if (e.key === "3") markGood();
+        if (e.key === "4") markEasy();
+      }
+
       if (e.key.toLowerCase() === "n" && FEATURES.next) {
         if (mode === "random") loadByMode();
-        else {
+        else if (mode === "review") {
+          nextReviewCard();
+        } else {
           const start = Math.min(
             selectedIndexRef.current + 1,
             selectedList.length
@@ -1450,6 +1652,42 @@ if (isRecordingRef.current) {
     );
   }
 
+  // ✅ màn hình ôn tập: hết từ hoặc không có từ cần ôn
+  if (!vocab && mode === "review") {
+    return (
+      <div className="lv-page">
+        <LoadingOverlay />
+        <div className="lv-shell">
+          <div className="lv-loading" style={{ textAlign: "center" }}>
+            ✅ Hôm nay bạn đã ôn xong (hoặc chưa có từ đến hạn).
+            <br />
+            <div style={{ marginTop: 12 }}>
+              <button className="lv-btn" onClick={reloadReviewQueue} disabled={loading}>
+                🔄 Tải lại danh sách ôn
+              </button>{" "}
+              <button className="lv-btn primary" onClick={goRandom}>
+                🎲 Random
+              </button>{" "}
+              <button className="lv-btn" onClick={goSelected}>
+                ✅ My List
+              </button>
+            </div>
+            {(todaySummary || reviewMeta) && (
+              <div style={{ marginTop: 10, opacity: 0.85 }}>
+                Còn đến hạn: <b>{dueForReview}</b> từ
+                {dueForReview === 0 && nextUpAt ? (
+                  <span style={{ marginLeft: 8 }}>
+                    • Tới hạn lúc <b>{formatDateTime(nextUpAt)}</b>
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!vocab) {
     return (
       <div className="lv-page">
@@ -1474,9 +1712,81 @@ if (isRecordingRef.current) {
             </p>
 
             <p className="lv-sub" style={{ opacity: 0.9 }}>
-              📊 Hôm nay: ✅ {todayStats.correct} • ❌ {todayStats.wrong} • Tổng{" "}
+              📊 Hôm nay (local): ✅ {todayStats.correct} • ❌ {todayStats.wrong} • Tổng{" "}
               {todayStats.total} • Từ đã làm: {todayStats.uniqueIds?.length || 0}
             </p>
+
+            {todaySummary && (
+              <div className="lv-goal">
+                <div className="lv-goal-row">
+                  <span>🎯 Mục tiêu:</span>
+                  <b>
+                    {todaySummary.minutesToday}/{todaySummary.goalMinutes} phút
+                  </b>
+                  <span className="lv-goal-meta">
+                    • 📌 Cần ôn: <b>{dueForReview}</b> từ
+                  </span>
+                  {dueForReview === 0 && nextUpAt ? (
+                    <span className="lv-goal-meta">
+                      • Tới hạn lúc <b>{formatDateTime(nextUpAt)}</b>
+                    </span>
+                  ) : null}
+                  {mode === "review" && (
+                    <span className="lv-goal-meta">
+                      • Còn lại: <b>{reviewRemaining}</b>
+                    </span>
+                  )}
+                </div>
+                <div className="lv-progress">
+                  <div
+                    className="lv-progress-bar"
+                    style={{ width: `${todaySummary.progressPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {weekSummary && (
+              <div className="lv-week" aria-label="Tổng phút 7 ngày gần đây">
+                {weekSummary.series.map((d) => {
+                  const h = Math.min(40, Math.max(4, d.minutes * 4));
+                  const isToday = todaySummary?.dateKey === d.dateKey;
+                  return (
+                    <div
+                      key={d.dateKey}
+                      className={`lv-week-bar ${isToday ? "today" : ""}`}
+                      title={`${d.dateKey}: ${d.minutes} phút`}
+                      style={{ height: h }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="lv-mode-row">
+              <button
+                className={`lv-pill ${mode === "random" ? "active" : ""}`}
+                onClick={goRandom}
+                disabled={loading || posting}
+              >
+                🎲 Random
+              </button>
+              <button
+                className={`lv-pill ${mode === "review" ? "active" : ""}`}
+                onClick={goReview}
+                title={dueForReview === 0 ? (nextUpAt ? `Chưa có từ đến hạn. Tới hạn lúc ${formatDateTime(nextUpAt)}` : "Chưa có từ đến hạn.") : "Ôn tập hôm nay"}
+                disabled={loading || posting || dueForReview === 0}
+              >
+                📌 Ôn tập{(todaySummary || reviewMeta) ? ` (${dueForReview})` : ""}
+              </button>
+              <button
+                className={`lv-pill ${mode === "selected" ? "active" : ""}`}
+                onClick={goSelected}
+                disabled={loading || posting}
+              >
+                ✅ My List
+              </button>
+            </div>
 
             {mode === "selected" ? (
               <p className="lv-sub">
@@ -1487,6 +1797,8 @@ if (isRecordingRef.current) {
                   <b style={{ marginLeft: 8 }}>⏳ Chưa hoàn thành</b>
                 )}
               </p>
+            ) : mode === "review" ? (
+              <p className="lv-sub">📌 Đang ôn tập hôm nay (từ đến hạn)</p>
             ) : (
               <p className="lv-sub">🎲 Đang ở chế độ Random (SRS)</p>
             )}
@@ -1850,8 +2162,8 @@ if (isRecordingRef.current) {
             <div className="lv-pron-gate">
               <span className={`lv-gate ${canPassPron ? "ok" : "lock"}`}>
                 {canPassPron
-                  ? `✅ Đạt ${PASS_PRON_SCORE}% — có thể bấm Đúng`
-                  : `🔒 Cần >= ${PASS_PRON_SCORE}% để bấm Đúng`}
+                  ? `✅ Đạt ${PASS_PRON_SCORE}% — có thể chấm Hard/Tốt/Dễ`
+                  : `🔒 Cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`}
               </span>
             </div>
           </div>
@@ -1887,24 +2199,53 @@ if (isRecordingRef.current) {
               <>
                 <button
                   className="lv-btn danger lv-btn--wrong"
-                  onClick={markWrong}
+                  onClick={markAgain}
                   disabled={posting}
+                  title="AGAIN (xem lại sớm)"
                 >
-                  ❌ Sai
+                  🔁 Again <span className="lv-kbd">1</span>
                 </button>
 
                 <button
-                  className={`lv-btn primary lv-btn--correct ${canPassPron ? "" : "locked"}`}
-                  onClick={canPassPron ? markCorrect : explainLocked}
+                  className={`lv-btn lv-btn--hard ${canPassPron ? "" : "locked"}`}
+                  onClick={canPassPron ? markHard : explainLocked}
                   disabled={posting}
                   aria-disabled={!canPassPron}
                   title={
                     canPassPron
-                      ? "Đạt phát âm, có thể lưu Đúng"
+                      ? "Hard (giữ box, ôn lại sớm hơn)"
                       : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
                   }
                 >
-                  {canPassPron ? "✅ Đúng" : "🔒 Đúng"}
+                  😣 Hard <span className="lv-kbd">2</span>
+                </button>
+
+                <button
+                  className={`lv-btn primary lv-btn--good ${canPassPron ? "" : "locked"}`}
+                  onClick={canPassPron ? markGood : explainLocked}
+                  disabled={posting}
+                  aria-disabled={!canPassPron}
+                  title={
+                    canPassPron
+                      ? "Good (tăng box)"
+                      : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
+                  }
+                >
+                  ✅ Tốt <span className="lv-kbd">3</span>
+                </button>
+
+                <button
+                  className={`lv-btn primary lv-btn--easy ${canPassPron ? "" : "locked"}`}
+                  onClick={canPassPron ? markEasy : explainLocked}
+                  disabled={posting}
+                  aria-disabled={!canPassPron}
+                  title={
+                    canPassPron
+                      ? "Easy (tăng nhanh box)"
+                      : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
+                  }
+                >
+                  ⭐ Dễ <span className="lv-kbd">4</span>
                 </button>
               </>
             )}
@@ -1958,6 +2299,40 @@ if (isRecordingRef.current) {
                   disabled={posting || loading}
                 >
                   🎲 Random
+                </button>
+              </>
+            ) : mode === "review" ? (
+              <>
+                <button
+                  className="lv-btn lv-btn--next"
+                  onClick={nextReviewCard}
+                  disabled={posting || loading}
+                >
+                  ⏭️ Next (Ôn tập) <span className="lv-kbd">N</span>
+                </button>
+
+                <button
+                  className="lv-btn lv-btn--aux"
+                  onClick={reloadReviewQueue}
+                  disabled={posting || loading}
+                >
+                  🔄 Tải lại danh sách ôn
+                </button>
+
+                <button
+                  className="lv-btn primary lv-btn--aux"
+                  onClick={goRandom}
+                  disabled={posting || loading}
+                >
+                  🎲 Random
+                </button>
+
+                <button
+                  className="lv-btn lv-btn--mylist"
+                  onClick={goSelected}
+                  disabled={posting || loading}
+                >
+                  ✅ My List
                 </button>
               </>
             ) : (

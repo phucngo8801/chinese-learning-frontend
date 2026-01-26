@@ -3,7 +3,20 @@
 // IMPORTANT: These keys MUST be scoped per-user because localStorage is shared
 // across accounts in the same browser.
 
-export type Mode = "random" | "selected";
+// Learning mode is used for local-only stats breakdown.
+// Keep this union stable because it is persisted in localStorage.
+export type Mode = "random" | "selected" | "review";
+
+/**
+ * Normalize an arbitrary mode value into a supported Mode.
+ * Keeps the app resilient to older clients / unexpected query params.
+ */
+export function normalizeMode(v: unknown): Mode {
+  const s = String(v ?? "").toLowerCase();
+  if (s === "selected") return "selected";
+  if (s === "review") return "review";
+  return "random";
+}
 
 export type PronItem = {
   vocabId: number;
@@ -163,6 +176,7 @@ export function getDailyStats(): DailyStats {
       byMode: {
         random: { correct: 0, wrong: 0, total: 0 },
         selected: { correct: 0, wrong: 0, total: 0 },
+        review: { correct: 0, wrong: 0, total: 0 },
       },
     };
     localStorage.setItem(k, JSON.stringify(fresh));
@@ -174,21 +188,29 @@ export function getDailyStats(): DailyStats {
     byMode: {
       random: raw.byMode?.random ?? { correct: 0, wrong: 0, total: 0 },
       selected: raw.byMode?.selected ?? { correct: 0, wrong: 0, total: 0 },
+      review: raw.byMode?.review ?? { correct: 0, wrong: 0, total: 0 },
     },
   };
 }
 
-export function bumpDaily(args: { vocabId: number; correct: boolean; mode: Mode }) {
+// NOTE: mode is optional/string for backwards compatibility with older callers.
+export function bumpDaily(args: {
+  vocabId: number;
+  correct: boolean;
+  mode?: Mode | string;
+}) {
   const s = getDailyStats();
   const isCorrect = args.correct;
+
+  const mode = normalizeMode(args.mode);
 
   s.total += 1;
   if (isCorrect) s.correct += 1;
   else s.wrong += 1;
 
-  s.byMode[args.mode].total += 1;
-  if (isCorrect) s.byMode[args.mode].correct += 1;
-  else s.byMode[args.mode].wrong += 1;
+  s.byMode[mode].total += 1;
+  if (isCorrect) s.byMode[mode].correct += 1;
+  else s.byMode[mode].wrong += 1;
 
   if (!s.uniqueIds.includes(args.vocabId)) s.uniqueIds.push(args.vocabId);
 
