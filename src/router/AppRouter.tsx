@@ -7,9 +7,11 @@ import Friends from "../pages/Friends/Friends";
 import Leaderboard from "../pages/Leaderboard/Leaderboard";
 import Activity from "../pages/Activity/Activity";
 import LearnVocab from "../pages/LearnVocab/LearnVocab";
+import DailyGate from "../pages/DailyGate/DailyGate";
 import Lessons from "../pages/Lessons/Lessons";
 import Quiz from "../pages/Quiz/Quiz";
 import AuthGuard from "../auth/AuthGuard";
+import DailyGateGuard from "../auth/DailyGateGuard";
 import AppLayout from "../layouts/AppLayout";
 import ToastProvider from "../components/ui/ToastProvider";
 import VocabBook from "../pages/VocabBook/VocabBook";
@@ -47,10 +49,16 @@ export default function AppRouter() {
             <Route index element={<Navigate to="learn-vocab" replace />} />
             <Route path="learn" element={<Navigate to="/learn-vocab" replace />} />
 
-            <Route path="learn-vocab" element={<LearnVocabRoute />} />
-            <Route path="vocab-book" element={<VocabBook />} />
-            <Route path="lessons" element={<Lessons />} />
-            <Route path="quiz" element={<Quiz />} />
+            <Route path="daily-gate" element={<DailyGate />} />
+
+            <Route element={<DailyGateGuard />}>
+              <Route path="learn-vocab" element={<LearnVocabRoute />} />
+              <Route path="vocab-book" element={<VocabBook />} />
+              <Route path="lessons" element={<Lessons />} />
+              <Route path="quiz" element={<Quiz />} />
+              <Route path="hanzi-world" element={<HanziWorld />} />
+              <Route path="pinyin-lab" element={<PinyinLab />} />
+            </Route>
             <Route path="streak" element={<Streak />} />
             <Route path="friends" element={<Friends />} />
             <Route path="leaderboard" element={<Leaderboard />} />
@@ -61,9 +69,7 @@ export default function AppRouter() {
             <Route path="settings" element={<Settings />} />
             <Route path="chat" element={<Chat />} />
 
-            <Route path="hanzi-world" element={<HanziWorld />} />
-
-            <Route path="pinyin-lab" element={<PinyinLab />} />
+            
           </Route>
 
           <Route path="*" element={<Navigate to="/learn-vocab" replace />} />

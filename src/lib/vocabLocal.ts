@@ -49,10 +49,19 @@ export const LV_UID_KEY = "lv_uid";
 // Base keys (we will prefix by uid)
 const PRON_KEY_BASE = "lv_pron_v1";
 const STATS_KEY_BASE = "lv_daily_stats_v1";
+const GATE_KEY_BASE = "lv_daily_gate_v1";
 
 // Legacy keys (old versions stored globally)
 const PRON_KEY_LEGACY = "lv_pron_v1";
 const STATS_KEY_LEGACY = "lv_daily_stats_v1";
+
+export type DailyGateLocal = {
+  dateKey: string;
+  passedAt: number; // Date.now()
+  bestScore: number;
+  threshold?: number;
+  vocabId?: number | null;
+};
 
 function normalizeUid(uid: string) {
   return encodeURIComponent(uid.trim().toLowerCase());
@@ -217,4 +226,41 @@ export function bumpDaily(args: {
   const k = scopedKey(STATS_KEY_BASE);
   localStorage.setItem(k, JSON.stringify(s));
   return s;
+}
+
+/* ---------------- DAILY GATE (LOCAL FALLBACK) ---------------- */
+export function getDailyGateLocal(dateKey = getLocalDateKey()): DailyGateLocal | null {
+  const k = scopedKey(GATE_KEY_BASE);
+  const raw = safeParse<DailyGateLocal | null>(localStorage.getItem(k), null);
+  if (!raw) return null;
+  if (raw.dateKey !== dateKey) return null;
+  return raw;
+}
+
+export function setDailyGateLocal(value: DailyGateLocal) {
+  const k = scopedKey(GATE_KEY_BASE);
+  localStorage.setItem(k, JSON.stringify(value));
+}
+
+export function markDailyGatePassedLocal(args: {
+  dateKey?: string;
+  bestScore?: number;
+  threshold?: number;
+  vocabId?: number | null;
+}) {
+  const dateKey = args.dateKey || getLocalDateKey();
+  const prev = getDailyGateLocal(dateKey);
+
+  setDailyGateLocal({
+    dateKey,
+    passedAt: Date.now(),
+    bestScore: Math.max(prev?.bestScore ?? 0, args.bestScore ?? 0),
+    threshold: typeof args.threshold === 'number' ? args.threshold : prev?.threshold,
+    vocabId: typeof args.vocabId === 'number' ? args.vocabId : prev?.vocabId ?? null,
+  });
+}
+
+export function isDailyGatePassedLocal(dateKey = getLocalDateKey()): boolean {
+  const g = getDailyGateLocal(dateKey);
+  return !!(g?.passedAt && g.passedAt > 0);
 }

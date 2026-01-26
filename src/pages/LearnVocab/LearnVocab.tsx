@@ -270,7 +270,28 @@ const [usageLoading, setUsageLoading] = useState(false);
   };
 
   const [autoNext, setAutoNext] = useState(true);
+  // 🔒 Strict mode: phải chấm đúng (Hard/Tốt/Dễ) mới được qua từ
+  const [strictMode, setStrictMode] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem("lv_strict_mode") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("lv_strict_mode", strictMode ? "1" : "0");
+    } catch {}
+  }, [strictMode]);
   const [completed, setCompleted] = useState(false);
+
+  const canAdvanceNow = !strictMode || completed;
+  const explainStrict = () => {
+    safeToast(
+      toast.error,
+      "🔒 Đang bật chế độ bắt buộc: bạn cần đạt phát âm và chấm Hard/Tốt/Dễ trước khi qua từ."
+    );
+  };
 
   // selected list state
   const [selectedList, setSelectedList] = useState<CatalogItem[]>([]);
@@ -313,7 +334,6 @@ const [usageLoading, setUsageLoading] = useState(false);
     const onFocus = () => {
       refreshTodaySummary();
       refreshWeekSummary();
-      refreshReviewMeta();
     };
 
     window.addEventListener("focus", onFocus);
@@ -335,22 +355,6 @@ const [usageLoading, setUsageLoading] = useState(false);
     const res = await api.get("/vocab/review/queue", { params: { limit } });
     return res.data as { ok: boolean; dueCount: number; nextUpAt: string | null; items: Vocab[] };
   };
-
-  const [reviewMeta, setReviewMeta] = useState<{ dueCount: number; nextUpAt: string | null } | null>(null);
-
-  const refreshReviewMeta = async () => {
-    try {
-      // limit=1 is enough to get dueCount/nextUpAt with minimal payload
-      const q = await fetchReviewQueue(1);
-      if (!mountedRef.current) return;
-      if (q?.ok) setReviewMeta({ dueCount: Number(q.dueCount || 0), nextUpAt: q.nextUpAt ?? null });
-    } catch {}
-  };
-
-  useEffect(() => {
-    refreshReviewMeta();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // pron
   const [spokenText, setSpokenText] = useState<string>("");
@@ -830,7 +834,6 @@ const renderHighlightedZh = (s: string) => {
       safeToast(toast.success, "✅ Đã ôn xong danh sách hôm nay!");
       // due count may change after finishing
       refreshTodaySummary();
-      refreshReviewMeta();
       return;
     }
 
@@ -851,7 +854,6 @@ const renderHighlightedZh = (s: string) => {
       setVocab(first);
       if (!first) safeToast(toast, "Hôm nay không có từ cần ôn.");
       refreshTodaySummary();
-      refreshReviewMeta();
       focusInput();
     } catch {
       safeToast(toast.error, "❌ Không tải được danh sách ôn.");
@@ -929,7 +931,6 @@ const renderHighlightedZh = (s: string) => {
       setTodayStats(bumpDaily({ vocabId: cur.id, correct: isCorrect, mode }));
       refreshTodaySummary();
       refreshWeekSummary();
-      refreshReviewMeta();
 
       if (isCorrect) {
         afterCorrect();
@@ -1519,20 +1520,6 @@ if (isRecordingRef.current) {
   const goReview = () => nav("/learn-vocab?mode=review");
   const goBackBook = () => nav("/vocab-book");
 
-  const dueForReview = todaySummary?.dueVocabCount ?? reviewMeta?.dueCount ?? 0;
-  const nextUpAt = reviewMeta?.nextUpAt ?? null;
-
-  const formatDateTime = (iso: string) => {
-    try {
-      return new Intl.DateTimeFormat("vi-VN", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(iso));
-    } catch {
-      return iso;
-    }
-  };
-
   // Hotkeys
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1555,6 +1542,11 @@ if (isRecordingRef.current) {
       }
 
       if (e.key.toLowerCase() === "n" && FEATURES.next) {
+        if (!canAdvanceNow) {
+          e.preventDefault();
+          explainStrict();
+          return;
+        }
         if (mode === "random") loadByMode();
         else if (mode === "review") {
           nextReviewCard();
@@ -1586,7 +1578,7 @@ if (isRecordingRef.current) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vocab, mode, autoNext, selectedList.length, pronScore]);
+  }, [vocab, mode, autoNext, selectedList.length, pronScore, strictMode, completed]);
 
   const onInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") checkPinyin();
@@ -1672,14 +1664,9 @@ if (isRecordingRef.current) {
                 ✅ My List
               </button>
             </div>
-            {(todaySummary || reviewMeta) && (
+            {todaySummary && (
               <div style={{ marginTop: 10, opacity: 0.85 }}>
-                Còn đến hạn: <b>{dueForReview}</b> từ
-                {dueForReview === 0 && nextUpAt ? (
-                  <span style={{ marginLeft: 8 }}>
-                    • Tới hạn lúc <b>{formatDateTime(nextUpAt)}</b>
-                  </span>
-                ) : null}
+                Còn đến hạn: <b>{todaySummary.dueVocabCount}</b> từ
               </div>
             )}
           </div>
@@ -1724,13 +1711,8 @@ if (isRecordingRef.current) {
                     {todaySummary.minutesToday}/{todaySummary.goalMinutes} phút
                   </b>
                   <span className="lv-goal-meta">
-                    • 📌 Cần ôn: <b>{dueForReview}</b> từ
+                    • 📌 Cần ôn: <b>{todaySummary.dueVocabCount}</b> từ
                   </span>
-                  {dueForReview === 0 && nextUpAt ? (
-                    <span className="lv-goal-meta">
-                      • Tới hạn lúc <b>{formatDateTime(nextUpAt)}</b>
-                    </span>
-                  ) : null}
                   {mode === "review" && (
                     <span className="lv-goal-meta">
                       • Còn lại: <b>{reviewRemaining}</b>
@@ -1774,10 +1756,9 @@ if (isRecordingRef.current) {
               <button
                 className={`lv-pill ${mode === "review" ? "active" : ""}`}
                 onClick={goReview}
-                title={dueForReview === 0 ? (nextUpAt ? `Chưa có từ đến hạn. Tới hạn lúc ${formatDateTime(nextUpAt)}` : "Chưa có từ đến hạn.") : "Ôn tập hôm nay"}
-                disabled={loading || posting || dueForReview === 0}
+                disabled={loading || posting || (todaySummary ? todaySummary.dueVocabCount === 0 : false)}
               >
-                📌 Ôn tập{(todaySummary || reviewMeta) ? ` (${dueForReview})` : ""}
+                📌 Ôn tập{todaySummary ? ` (${todaySummary.dueVocabCount})` : ""}
               </button>
               <button
                 className={`lv-pill ${mode === "selected" ? "active" : ""}`}
@@ -1804,14 +1785,35 @@ if (isRecordingRef.current) {
             )}
           </div>
 
-          <label className="lv-toggle">
-            <input
-              type="checkbox"
-              checked={autoNext}
-              onChange={(e) => setAutoNext(e.target.checked)}
-            />
-            <span>Tự qua từ khi đúng</span>
-          </label>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              alignItems: "flex-end",
+            }}
+          >
+            <label className="lv-toggle">
+              <input
+                type="checkbox"
+                checked={autoNext}
+                onChange={(e) => setAutoNext(e.target.checked)}
+              />
+              <span>Tự qua từ khi đúng</span>
+            </label>
+
+            <label
+              className="lv-toggle"
+              title="Bật chế độ này để tránh lướt nhanh: bạn phải đạt phát âm và chấm Hard/Tốt/Dễ mới qua từ."
+            >
+              <input
+                type="checkbox"
+                checked={strictMode}
+                onChange={(e) => setStrictMode(e.target.checked)}
+              />
+              <span>Bắt buộc đọc đúng mới qua từ</span>
+            </label>
+          </div>
         </div>
 
         <div className="lv-grid">
@@ -2272,7 +2274,7 @@ if (isRecordingRef.current) {
                       focusInput();
                     });
                   }}
-                  disabled={posting || loading}
+                  disabled={posting || loading || !canAdvanceNow}
                 >
                   ⏭️ Next (My List) <span className="lv-kbd">N</span>
                 </button>
@@ -2306,7 +2308,7 @@ if (isRecordingRef.current) {
                 <button
                   className="lv-btn lv-btn--next"
                   onClick={nextReviewCard}
-                  disabled={posting || loading}
+                  disabled={posting || loading || !canAdvanceNow}
                 >
                   ⏭️ Next (Ôn tập) <span className="lv-kbd">N</span>
                 </button>
@@ -2340,7 +2342,7 @@ if (isRecordingRef.current) {
                 <button
                   className="lv-btn"
                   onClick={loadByMode}
-                  disabled={posting || loading}
+                  disabled={posting || loading || !canAdvanceNow}
                 >
                   ⏭️ Next <span className="lv-kbd">N</span>
                 </button>
