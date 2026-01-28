@@ -5,8 +5,9 @@ import api from "../api/axios";
 import toast from "../lib/toast";
 import {
   getLocalDateKey,
-  isDailyGatePassedLocal,
+  isDailyGateClearedLocal,
   markDailyGatePassedLocal,
+  markDailyGateSkippedLocal,
 } from "../lib/vocabLocal";
 
 type DailyGateResponse = {
@@ -14,6 +15,7 @@ type DailyGateResponse = {
   dateKey: string;
   threshold: number;
   passed: boolean;
+  skipped?: boolean;
   bestScore?: number;
   phrase?: { vocabId?: number | null };
 };
@@ -71,7 +73,7 @@ export default function DailyGateGuard() {
       const localKey = getLocalDateKey();
 
       // Fast path: local
-      if (isDailyGatePassedLocal(localKey)) {
+      if (isDailyGateClearedLocal(localKey)) {
         if (!alive) return;
         setPassed(true);
         setChecked(true);
@@ -88,6 +90,17 @@ export default function DailyGateGuard() {
             markDailyGatePassedLocal({
               dateKey: data.dateKey || localKey,
               bestScore: typeof data.bestScore === "number" ? data.bestScore : 100,
+              threshold: typeof data.threshold === "number" ? data.threshold : undefined,
+              vocabId: data.phrase?.vocabId ?? null,
+            });
+            setPassed(true);
+            setChecked(true);
+            return;
+          }
+
+          if (data.skipped) {
+            markDailyGateSkippedLocal({
+              dateKey: data.dateKey || localKey,
               threshold: typeof data.threshold === "number" ? data.threshold : undefined,
               vocabId: data.phrase?.vocabId ?? null,
             });

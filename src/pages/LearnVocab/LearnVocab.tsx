@@ -39,7 +39,7 @@ const FEATURES = {
 };
 
 // ✅ Ngưỡng để được bấm “Đúng”
-const PASS_PRON_SCORE = 75;
+const DEFAULT_passPronScore = 60;
 
 function stripDiacritics(s: string) {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -60,6 +60,34 @@ function tokenizePinyin(s: string): string[] {
   if (!n) return [];
   return n.split(" ").filter(Boolean);
 }
+
+function normHan(s: string) {
+  return (s || "")
+    .replace(/[，。！？、；：]/g, " ")
+    .replace(/[!?.,;:"'“”‘’()【】[\]{}<>]/g, " ")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function levenshteinStr(a: string, b: string) {
+  const n = a.length;
+  const m = b.length;
+  if (!n) return m;
+  if (!m) return n;
+
+  const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+  for (let i = 0; i <= n; i++) dp[i][0] = i;
+  for (let j = 0; j <= m; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[n][m];
+}
+
 
 function levenshteinOps(a: string[], b: string[]): DiffOp[] {
   const n = a.length;
@@ -283,6 +311,22 @@ const [usageLoading, setUsageLoading] = useState(false);
       window.localStorage.setItem("lv_strict_mode", strictMode ? "1" : "0");
     } catch {}
   }, [strictMode]);
+
+  const [passPronScore, setPassPronScore] = useState<number>(() => {
+    try {
+      const raw = window.localStorage.getItem("lv_pass_pron_score");
+      const n = raw ? parseInt(raw, 10) : DEFAULT_passPronScore;
+      return Number.isFinite(n) ? Math.min(95, Math.max(40, n)) : DEFAULT_passPronScore;
+    } catch {
+      return DEFAULT_passPronScore;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("lv_pass_pron_score", String(passPronScore));
+    } catch {}
+  }, [passPronScore]);
+
   const [completed, setCompleted] = useState(false);
 
   const canAdvanceNow = !strictMode || completed;
@@ -327,13 +371,21 @@ const [usageLoading, setUsageLoading] = useState(false);
     } catch {}
   };
 
+  // ✅ throttle summary calls to avoid spamming backend (esp. when DB is slow)
+  const lastSummaryRef = useRef(0);
+  const refreshSummaries = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastSummaryRef.current < 15000) return; // 15s
+    lastSummaryRef.current = now;
+
+    await Promise.all([refreshTodaySummary(), refreshWeekSummary()]);
+  };
+
   useEffect(() => {
-    refreshTodaySummary();
-    refreshWeekSummary();
+    refreshSummaries(true);
 
     const onFocus = () => {
-      refreshTodaySummary();
-      refreshWeekSummary();
+      refreshSummaries(false);
     };
 
     window.addEventListener("focus", onFocus);
@@ -376,7 +428,7 @@ const [pronMistakes, setPronMistakes] = useState<
   const pronWrongLoggedRef = useRef<boolean>(false);
 
   // ✅ khóa/mở nút “Đúng”
-  const canPassPron = pronScore !== null && pronScore >= PASS_PRON_SCORE;
+  const canPassPron = pronScore !== null && pronScore >= passPronScore;
 
   const explainLocked = () => {
     if (pronScore === null) {
@@ -385,7 +437,7 @@ const [pronMistakes, setPronMistakes] = useState<
     }
     safeToast(
       toast.error,
-      `🔒 Chưa đạt: ${pronScore}%. Cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ.`
+      `🔒 Chưa đạt: ${pronScore}%. Cần >= ${passPronScore}% để chấm Hard/Tốt/Dễ.`
     );
   };
 
@@ -743,14 +795,16 @@ const forceFinalizeTimerRef = useRef<number | null>(null);
     focusInput();
   };
 
-  const speak = () => {
+  const speakAt = (rate: number) => {
     if (!vocab) return;
     const u = new SpeechSynthesisUtterance(vocab.zh);
     u.lang = "zh-CN";
-    u.rate = speechRate;
+    u.rate = rate;
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
   };
+
+  const speak = () => speakAt(speechRate);
 const translateUsage = async () => {
   const clean = usageVi.trim();
   if (!clean) return;
@@ -925,12 +979,14 @@ const renderHighlightedZh = (s: string) => {
 
     try {
       setPosting(true);
-      await postResult(cur.id, grade);
+      // Do not block UI on slow DB/network; send in background.
+      postResult(cur.id, grade).catch(() => {
+        safeToast(toast.error, "❌ Ghi kết quả thất bại (POST /vocab/result).");
+      });
 
       if (!mountedRef.current) return;
       setTodayStats(bumpDaily({ vocabId: cur.id, correct: isCorrect, mode }));
-      refreshTodaySummary();
-      refreshWeekSummary();
+      refreshSummaries(false);
 
       if (isCorrect) {
         afterCorrect();
@@ -950,11 +1006,12 @@ const renderHighlightedZh = (s: string) => {
       console.error(e);
       safeToast(toast.error, "❌ Ghi kết quả thất bại (POST /vocab/result).");
     } finally {
-      mountedRef.current && setPosting(false);
+      // Release UI quickly; background save may still be in-flight.
+      safeTimeout(() => setPosting(false), 150);
     }
   };
 
-  // ✅ “Đúng” chỉ cho bấm khi pronScore >= 75
+  // ✅ “Hard/Tốt/Dễ” chỉ mở khóa khi pronScore >= passPronScore
   const markEasy = async () => {
     if (!canPassPron) return explainLocked();
     await submitGrade(3);
@@ -984,8 +1041,15 @@ const renderHighlightedZh = (s: string) => {
 
     const containsCJK = /[\u3400-\u9FBF]/.test(transcript);
     if (containsCJK) {
-      const ok = transcript.includes(vocab.zh);
-      const score = ok ? 100 : 0;
+      const got = normHan(transcript);
+      const exp = normHan(vocab.zh);
+
+      const ok = !!exp && got.includes(exp);
+      // Missing punctuation/spacing or small diffs should not be 0%
+      const dist = exp && got ? levenshteinStr(exp, got) : 999;
+      const denom = Math.max(exp.length || 1, got.length || 1);
+      const fuzzy = exp && got ? Math.max(0, 1 - dist / denom) : 0;
+      const score = ok ? 100 : Math.round(fuzzy * 100);
 
       setPronScore(score);
       setExpectedTokensUI(
@@ -1017,7 +1081,7 @@ setPronMistakes(
 savePronAttempt({ vocabId: vocab.id, score, transcript });
 
       // ✅ nếu phát âm (từ SpeechRecognition) không đạt, tính là "Sai" 1 lần
-      if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
+      if (score < passPronScore && !pronWrongLoggedRef.current) {
         pronWrongLoggedRef.current = true;
         if (result !== "correct") setResult("wrong");
         if (mountedRef.current)
@@ -1026,12 +1090,12 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
         postResult(vocab.id, 0, 0).catch(() => void 0);
       }
 
-      if (score >= PASS_PRON_SCORE) {
+      if (score >= passPronScore) {
         safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa Hard/Tốt/Dễ`);
       } else {
         safeToast(
           toast.error,
-          `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`
+          `🔒 Phát âm ${score}% — cần >= ${passPronScore}% để chấm Hard/Tốt/Dễ`
         );
       }
       return;
@@ -1101,7 +1165,7 @@ setPronMistakes(
 savePronAttempt({ vocabId: vocab.id, score, transcript });
 
     // ✅ nếu phát âm không đạt, tính là "Sai" 1 lần (không spam)
-    if (score < PASS_PRON_SCORE && !pronWrongLoggedRef.current) {
+    if (score < passPronScore && !pronWrongLoggedRef.current) {
       pronWrongLoggedRef.current = true;
       if (result !== "correct") setResult("wrong");
       if (mountedRef.current)
@@ -1110,12 +1174,12 @@ savePronAttempt({ vocabId: vocab.id, score, transcript });
       postResult(vocab.id, 0, 0).catch(() => void 0);
     }
 
-    if (score >= PASS_PRON_SCORE) {
+    if (score >= passPronScore) {
         safeToast(toast.success, `✅ Phát âm ${score}% — mở khóa Hard/Tốt/Dễ`);
     } else {
       safeToast(
         toast.error,
-          `🔒 Phát âm ${score}% — cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`
+          `🔒 Phát âm ${score}% — cần >= ${passPronScore}% để chấm Hard/Tốt/Dễ`
       );
     }
   };
@@ -2064,6 +2128,20 @@ if (isRecordingRef.current) {
                   ? `${pronScore}% (${pronBreakdown.correct}/${pronBreakdown.total})`
                   : `${pronScore}%`}
               </div>
+              <div
+                className="lv-pron-threshold"
+                title="Ngưỡng để mở khóa Hard/Tốt/Dễ. Người mới nên để 55–65%."
+              >
+                <span className="lv-pron-muted">Ngưỡng: {passPronScore}%</span>
+                <input
+                  type="range"
+                  min={40}
+                  max={95}
+                  step={5}
+                  value={passPronScore}
+                  onChange={(e) => setPassPronScore(parseInt(e.target.value, 10))}
+                />
+              </div>
             </div>
 
             <div className="lv-pron-row">
@@ -2164,8 +2242,8 @@ if (isRecordingRef.current) {
             <div className="lv-pron-gate">
               <span className={`lv-gate ${canPassPron ? "ok" : "lock"}`}>
                 {canPassPron
-                  ? `✅ Đạt ${PASS_PRON_SCORE}% — có thể chấm Hard/Tốt/Dễ`
-                  : `🔒 Cần >= ${PASS_PRON_SCORE}% để chấm Hard/Tốt/Dễ`}
+                  ? `✅ Đạt ${passPronScore}% — có thể chấm Hard/Tốt/Dễ`
+                  : `🔒 Cần >= ${passPronScore}% để chấm Hard/Tốt/Dễ`}
               </span>
             </div>
           </div>
@@ -2175,9 +2253,18 @@ if (isRecordingRef.current) {
         <div className="lv-toolbar">
           <div className="lv-toolbar-left">
             {FEATURES.speak && (
-              <button className="lv-btn lv-btn--hear" onClick={speak}>
-                🔊 Nghe <span className="lv-kbd">S</span>
-              </button>
+              <>
+                <button className="lv-btn lv-btn--hear" onClick={speak}>
+                  🔊 Nghe <span className="lv-kbd">S</span>
+                </button>
+                <button
+                  className="lv-btn mini"
+                  onClick={() => speakAt(Math.max(0.6, Math.min(1, passPronScore >= 80 ? 0.8 : 0.75)))}
+                  title="Nghe chậm để bắt chước nhịp và âm cuối"
+                >
+                  🐢 Nghe chậm
+                </button>
+              </>
             )}
 
             {FEATURES.record && (
@@ -2216,7 +2303,7 @@ if (isRecordingRef.current) {
                   title={
                     canPassPron
                       ? "Hard (giữ box, ôn lại sớm hơn)"
-                      : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
+                      : `Cần chấm phát âm >= ${passPronScore}%`
                   }
                 >
                   😣 Hard <span className="lv-kbd">2</span>
@@ -2230,7 +2317,7 @@ if (isRecordingRef.current) {
                   title={
                     canPassPron
                       ? "Good (tăng box)"
-                      : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
+                      : `Cần chấm phát âm >= ${passPronScore}%`
                   }
                 >
                   ✅ Tốt <span className="lv-kbd">3</span>
@@ -2244,7 +2331,7 @@ if (isRecordingRef.current) {
                   title={
                     canPassPron
                       ? "Easy (tăng nhanh box)"
-                      : `Cần chấm phát âm >= ${PASS_PRON_SCORE}%`
+                      : `Cần chấm phát âm >= ${passPronScore}%`
                   }
                 >
                   ⭐ Dễ <span className="lv-kbd">4</span>

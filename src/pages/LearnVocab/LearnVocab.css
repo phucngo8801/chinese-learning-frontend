@@ -876,3 +876,26 @@
   .lv-btn { padding: 9px 12px; font-size: 13px; }
   .lv-toolbar { gap: 8px; }
 }
+
+
+/* Pron threshold control */
+.lv-pron-threshold {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 12px;
+}
+.lv-pron-threshold input[type="range"] {
+  width: 140px;
+}
+@media (max-width: 720px) {
+  .lv-pron-threshold {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+    margin-top: 6px;
+  }
+  .lv-pron-threshold input[type="range"] {
+    width: 160px;
+  }
+}

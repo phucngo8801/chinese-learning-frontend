@@ -57,7 +57,9 @@ const STATS_KEY_LEGACY = "lv_daily_stats_v1";
 
 export type DailyGateLocal = {
   dateKey: string;
-  passedAt: number; // Date.now()
+  passedAt?: number; // Date.now()
+  skippedAt?: number; // Date.now()
+  status?: "passed" | "skipped";
   bestScore: number;
   threshold?: number;
   vocabId?: number | null;
@@ -253,14 +255,41 @@ export function markDailyGatePassedLocal(args: {
 
   setDailyGateLocal({
     dateKey,
+    status: "passed",
     passedAt: Date.now(),
+    // Clear skippedAt locally if user later passes
+    skippedAt: undefined,
     bestScore: Math.max(prev?.bestScore ?? 0, args.bestScore ?? 0),
-    threshold: typeof args.threshold === 'number' ? args.threshold : prev?.threshold,
-    vocabId: typeof args.vocabId === 'number' ? args.vocabId : prev?.vocabId ?? null,
+    threshold: typeof args.threshold === "number" ? args.threshold : prev?.threshold,
+    vocabId: typeof args.vocabId === "number" ? args.vocabId : prev?.vocabId ?? null,
   });
 }
 
 export function isDailyGatePassedLocal(dateKey = getLocalDateKey()): boolean {
   const g = getDailyGateLocal(dateKey);
   return !!(g?.passedAt && g.passedAt > 0);
+}
+
+export function markDailyGateSkippedLocal(args: {
+  dateKey?: string;
+  threshold?: number;
+  vocabId?: number | null;
+}) {
+  const dateKey = args.dateKey || getLocalDateKey();
+  const prev = getDailyGateLocal(dateKey);
+
+  setDailyGateLocal({
+    dateKey,
+    status: "skipped",
+    skippedAt: Date.now(),
+    passedAt: undefined,
+    bestScore: prev?.bestScore ?? 0,
+    threshold: typeof args.threshold === "number" ? args.threshold : prev?.threshold,
+    vocabId: typeof args.vocabId === "number" ? args.vocabId : prev?.vocabId ?? null,
+  });
+}
+
+export function isDailyGateClearedLocal(dateKey = getLocalDateKey()): boolean {
+  const g = getDailyGateLocal(dateKey);
+  return !!((g?.passedAt && g.passedAt > 0) || (g?.skippedAt && g.skippedAt > 0));
 }

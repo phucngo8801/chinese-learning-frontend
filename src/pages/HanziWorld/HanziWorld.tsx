@@ -13,6 +13,8 @@ type Seg =
   | { kind: "text"; text: string }
   | { kind: "term"; text: string; term: ReaderVocab };
 
+type VocabIndex = Record<string, ReaderVocab[]>;
+
 type VoiceStyle = "neutral" | "cheerful" | "story" | "clear";
 
 type GameQ = {
@@ -90,11 +92,51 @@ function splitSentencesZh(text: string): string[] {
     .slice(0, 1200);
 }
 
-function buildSegments(zh: string, vocab: ReaderVocab[]): Seg[] {
+function mergeChunks(chunks: string[], maxLen = 140): string[] {
+  const out: string[] = [];
+  let buf = "";
+
+  for (const c of chunks) {
+    const s = (c || "").trim();
+    if (!s) continue;
+
+    if (!buf) {
+      buf = s;
+      continue;
+    }
+
+    const next = `${buf} ${s}`;
+    if (next.length <= maxLen) {
+      buf = next;
+    } else {
+      out.push(buf);
+      buf = s;
+    }
+  }
+
+  if (buf) out.push(buf);
+  return out;
+}
+
+
+function buildVocabIndex(vocab: ReaderVocab[]): VocabIndex {
+  const idx: VocabIndex = {};
+  for (const t of vocab) {
+    const zh = (t.zh || "").trim();
+    if (!zh) continue;
+    const first = zh[0];
+    (idx[first] ||= []).push(t);
+  }
+  for (const k of Object.keys(idx)) {
+    idx[k].sort((a, b) => b.zh.length - a.zh.length);
+  }
+  return idx;
+}
+
+function buildSegmentsFast(zh: string, index: VocabIndex): Seg[] {
   const s = zh || "";
   if (!s) return [];
 
-  const terms = [...vocab].sort((a, b) => b.zh.length - a.zh.length);
   const out: Seg[] = [];
   let buf = "";
 
@@ -107,8 +149,10 @@ function buildSegments(zh: string, vocab: ReaderVocab[]): Seg[] {
 
   let i = 0;
   while (i < s.length) {
+    const candidates = index[s[i]] || [];
     let matched: ReaderVocab | null = null;
-    for (const t of terms) {
+
+    for (const t of candidates) {
       if (!t.zh) continue;
       if (s.startsWith(t.zh, i)) {
         matched = t;
@@ -130,6 +174,7 @@ function buildSegments(zh: string, vocab: ReaderVocab[]): Seg[] {
   flushBuf();
   return out;
 }
+
 
 function randInt(n: number) {
   return Math.floor(Math.random() * n);
@@ -189,10 +234,24 @@ export default function HanziWorld() {
   );
 
   const vocab = story?.vocab || [];
+  const vocabIndex = useMemo(() => buildVocabIndex(vocab), [vocab]);
+  
+  const segmentsBySentence = useMemo(() => {
+    if (!story) return [];
+    return story.sentences.map((sent) => buildSegmentsFast(sent.zh, vocabIndex));
+  }, [story, vocabIndex]);
+  
+  const allZh = useMemo(() => {
+    if (!story) return "";
+    return story.sentences.map((x) => x.zh).join(" ");
+  }, [story]);
+  
+  const allZhChunks = useMemo(() => mergeChunks(splitSentencesZh(allZh), 140), [allZh]);
 
   const zhVoices = useMemo(() => {
-    const vs = voices.filter((v) => (v.lang || "").toLowerCase().startsWith("zh"));
-    return vs.length ? vs : voices;
+    const zh = voices.filter((v) => (v.lang || "").toLowerCase().startsWith("zh"));
+    const base = zh.length ? zh : voices;
+    return [...base].sort((a, b) => Number(b.localService) - Number(a.localService));
   }, [voices]);
 
   const selectedVoice = useMemo(() => {
@@ -506,9 +565,6 @@ export default function HanziWorld() {
     );
   }
 
-  const allZh = story.sentences.map((x) => x.zh).join(" ");
-  const allZhChunks = splitSentencesZh(allZh);
-
   return (
     <div className="hw-page">
       <div className="hw-top">
@@ -541,7 +597,7 @@ export default function HanziWorld() {
               <option value="">Mặc định</option>
               {zhVoices.map((v) => (
                 <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
+                  {v.name} ({v.lang}) {v.localService ? "• Local" : "• Online"}
                 </option>
               ))}
             </select>
@@ -609,7 +665,7 @@ export default function HanziWorld() {
 
           <div className="hw-reading-body" role="article" aria-label="Reader">
             {story.sentences.map((sent, idx) => {
-              const segments = buildSegments(sent.zh, vocab);
+              const segments = segmentsBySentence[idx] || [];
               return (
                 <div key={idx} className="hw-sentence">
                   {showPinyin && sent.pinyin ? <div className="hw-py">{sent.pinyin}</div> : null}

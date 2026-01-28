@@ -6,6 +6,7 @@ import toast from "../../lib/toast";
 import {
   getLocalDateKey,
   markDailyGatePassedLocal,
+  markDailyGateSkippedLocal,
 } from "../../lib/vocabLocal";
 
 import "./DailyGate.css";
@@ -20,12 +21,28 @@ type GatePhrase = {
 type DailyGateResponse = {
   ok: boolean;
   dateKey: string;
+
+  // FE will use "threshold" as the effective threshold (auto-easy applied)
   threshold: number;
+  thresholdBase?: number;
+  thresholdFloor?: number;
+  autoEasyStep?: number;
+
+  failCount?: number;
+
   passed: boolean;
   passedAt: string | null;
+
+  skipped?: boolean;
+  skippedAt?: string | null;
+  skipLeft?: number;
+
   bestScore: number;
+
   rerollCount?: number;
   rerollLimit?: number;
+  rerollLeft?: number;
+
   phrase: GatePhrase;
 };
 
@@ -162,7 +179,13 @@ export default function DailyGate() {
   const canPass = pronScore !== null && pronScore >= threshold;
   const rerollLimit = gate?.rerollLimit ?? 5;
   const rerollCount = gate?.rerollCount ?? 0;
-  const rerollLeft = Math.max(0, rerollLimit - rerollCount);
+  const rerollLeft = typeof gate?.rerollLeft === "number" ? Math.max(0, gate.rerollLeft) : Math.max(0, rerollLimit - rerollCount);
+  const failCount = gate?.failCount ?? 0;
+  const thresholdBase = gate?.thresholdBase ?? threshold;
+  const thresholdFloor = gate?.thresholdFloor ?? 65;
+  const autoEasyStep = gate?.autoEasyStep ?? 5;
+  const skipped = !!gate?.skipped;
+  const skipLeft = typeof gate?.skipLeft === "number" ? gate.skipLeft : skipped ? 0 : 1;
 
   const speak = () => {
     const phrase = gate?.phrase;
@@ -189,6 +212,12 @@ export default function DailyGate() {
           markDailyGatePassedLocal({
             dateKey: res.data.dateKey || getLocalDateKey(),
             bestScore: res.data.bestScore || 100,
+            threshold: res.data.threshold,
+            vocabId: res.data.phrase?.vocabId ?? null,
+          });
+        } else if (res.data.skipped) {
+          markDailyGateSkippedLocal({
+            dateKey: res.data.dateKey || getLocalDateKey(),
             threshold: res.data.threshold,
             vocabId: res.data.phrase?.vocabId ?? null,
           });
@@ -433,7 +462,7 @@ export default function DailyGate() {
     try {
       if (isRecording) stopRecord();
     } catch {}
-    if (gate.passed) return;
+    if (gate.passed || gate.skipped) return;
     if (rerollLimit > 0 && rerollLeft <= 0) {
       toast.error("Hết lượt đổi câu hôm nay.");
       return;
@@ -458,6 +487,39 @@ export default function DailyGate() {
   };
 
 
+
+  const skipToday = async () => {
+    if (!gate) return;
+    if (gate.passed) return;
+    if (gate.skipped) {
+      toast.error("Bạn đã bỏ qua hôm nay rồi.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await api.post<DailyGateResponse>("/study/daily-gate/skip");
+      if (!mountedRef.current) return;
+
+      if (res.data?.ok) {
+        setGate(res.data);
+        markDailyGateSkippedLocal({
+          dateKey: res.data.dateKey || getLocalDateKey(),
+          threshold: res.data.threshold,
+          vocabId: res.data.phrase?.vocabId ?? null,
+        });
+        toast.success("⏭️ Đã bỏ qua Daily Gate hôm nay.");
+        nav(redirect, { replace: true });
+      } else {
+        toast.error("❌ Không bỏ qua được hôm nay.");
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "❌ Không bỏ qua được hôm nay.");
+    } finally {
+      mountedRef.current && setSubmitting(false);
+    }
+  };
+
   const unlock = async () => {
     if (!gate) return;
     if (pronScore === null) {
@@ -478,17 +540,20 @@ export default function DailyGate() {
       await loadGate();
 
       if (res.data?.ok) {
-        if (pronScore >= threshold) {
+        const passedNow = !!res.data?.passed;
+        const effTh = typeof res.data?.threshold === "number" ? res.data.threshold : threshold;
+
+        if (passedNow) {
           markDailyGatePassedLocal({
-            dateKey: gate.dateKey,
+            dateKey: res.data.dateKey || gate.dateKey,
             bestScore: pronScore,
-            threshold,
+            threshold: effTh,
             vocabId: gate.phrase?.vocabId ?? null,
           });
           toast.success("✅ Đã mở khóa Daily Gate!");
           nav(redirect, { replace: true });
         } else {
-          toast.error(`🔒 Chưa đạt: ${pronScore}%. Cần >= ${threshold}%`);
+          toast.error(`🔒 Chưa đạt: ${pronScore}%. Cần >= ${effTh}%`);
         }
       }
     } catch (e: any) {
@@ -525,6 +590,16 @@ export default function DailyGate() {
             <div className="dg-sub">
               Hôm nay ({gate.dateKey}) bạn cần đọc đúng để mở khóa học bài.
             </div>
+            <div className="dg-meta">
+              <span className="dg-chip">Ngưỡng: <b>{threshold}%</b></span>
+              <span className="dg-chip">Base: <b>{thresholdBase}%</b></span>
+              <span className="dg-chip">Fail: <b>{failCount}</b></span>
+              <span className="dg-chip">Auto-easy: <b>-{autoEasyStep}%</b>/fail (sàn <b>{thresholdFloor}%</b>)</span>
+              {rerollLimit > 0 ? (
+                <span className="dg-chip">Reroll: <b>{rerollLeft}</b>/{rerollLimit}</span>
+              ) : null}
+              <span className="dg-chip">Skip: <b>{skipLeft}</b>/1</span>
+            </div>
           </div>
 
           <button className="dg-btn dg-btn--ghost" onClick={() => nav(redirect)}>
@@ -532,11 +607,21 @@ export default function DailyGate() {
           </button>
         </div>
 
-        {gate.passed ? (
+        {gate.passed || gate.skipped ? (
           <div className="dg-pass">
-            <div className="dg-pass-title">✅ Bạn đã mở khóa hôm nay!</div>
+            <div className="dg-pass-title">
+              {gate.passed ? "✅ Bạn đã mở khóa hôm nay!" : "⏭️ Bạn đã bỏ qua Daily Gate hôm nay."}
+            </div>
             <div className="dg-pass-meta">
-              Best: <b>{gate.bestScore}%</b> • Ngưỡng: <b>{threshold}%</b>
+              {gate.passed ? (
+                <>
+                  Best: <b>{gate.bestScore}%</b> • Ngưỡng: <b>{threshold}%</b>
+                </>
+              ) : (
+                <>
+                  Trạng thái: <b>Skipped</b> • (Bạn vẫn vào học bình thường)
+                </>
+              )}
             </div>
             <button className="dg-btn dg-btn--primary" onClick={() => nav(redirect, { replace: true })}>
               Vào học
@@ -565,12 +650,27 @@ export default function DailyGate() {
                 <button
                   className="dg-btn dg-btn--ghost"
                   onClick={rerollPhrase}
-                  disabled={rerolling || submitting || rerollLeft <= 0}
-                  title={rerollLeft > 0 ? `Còn ${rerollLeft} lượt` : "Hết lượt đổi hôm nay"}
+                  disabled={rerolling || submitting || rerollLeft <= 0 || skipped}
+                  title={
+                    skipped
+                      ? "Bạn đã skip hôm nay"
+                      : rerollLeft > 0
+                        ? `Còn ${rerollLeft} lượt`
+                        : "Hết lượt đổi hôm nay"
+                  }
                 >
                   🔁 Đổi câu khác {rerollLimit > 0 ? `(${rerollLeft})` : ""}
                 </button>
               )}
+
+              <button
+                className="dg-btn dg-btn--ghost"
+                onClick={skipToday}
+                disabled={submitting || gate.passed || skipped || skipLeft <= 0}
+                title={skipLeft > 0 ? "Bỏ qua hôm nay (1 lần/ngày)" : "Hết lượt skip hôm nay"}
+              >
+                ⏭️ Bỏ qua hôm nay {skipLeft > 0 ? "" : "(0)"}
+              </button>
 </div>
 
             <div className="dg-pron">
