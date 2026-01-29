@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import toast from "../../lib/toast";
@@ -38,7 +38,7 @@ type CatalogResponse = {
 
 type FilterKey = "all" | "new" | "learning" | "due" | "weak" | "mastered" | "selected";
 
-type HskFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6;
+type HskFilter = "all" | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Tất cả" },
@@ -89,6 +89,13 @@ export default function VocabBook() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  // bulk tick + bulk actions (chọn nhiều để bỏ khỏi danh sách)
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Cho phép user bỏ chọn trong lúc đang bulk add/remove mà không bị khóa UI.
+  // (Không hủy request đang chạy, chỉ tránh disable các nút chọn/bỏ chọn.)
+  const bulkAbortRef = useRef({ aborted: false });
+
   const [active, setActive] = useState<CatalogItem | null>(null);
 
   // ✅ modal add vocab
@@ -113,31 +120,87 @@ export default function VocabBook() {
   const [pronMap, setPronMapState] = useState(() => getPronMap());
 
   const limit = 50;
-  const debouncedQ = useMemo(() => q.trim(), [q]);
+  const qTrim = useMemo(() => q.trim(), [q]);
+  const [qDebounced, setQDebounced] = useState(qTrim);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total]);
 
+  // Debounce ONLY the search query. HSK/filter switching should be immediate.
+  useEffect(() => {
+    const t = window.setTimeout(() => setQDebounced(qTrim), 250);
+    return () => window.clearTimeout(t);
+  }, [qTrim]);
+
+  const abortRef = useRef<AbortController | null>(null);
+  const reqSeqRef = useRef(0);
+  const catalogCacheRef = useRef(new Map<string, { ts: number; value: CatalogResponse }>());
+  const loadingTimerRef = useRef<number | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+
   const fetchPage = async (p: number) => {
-    try {
-      setLoading(true);
+  const key = `${filter}|${hsk}|${qDebounced}|${p}`;
 
-      const params: any = { q: debouncedQ, filter, page: p, limit };
-      if (hsk !== "all") params.hsk = hsk;
+  // Serve from cache for fast tab switching
+  const cached = catalogCacheRef.current.get(key);
+  // Cache a little longer so switching HSK tabs feels instant.
+  if (cached && Date.now() - cached.ts < 120_000) {
+    const data = cached.value;
+    setLoading(false);
+    startTransition(() => {
+      setItems(data.items || []);
+      setTotal(data.total || 0);
+      const serverPage = data.page ?? p;
+      setPage(serverPage);
+      setPageInput(String(serverPage));
+    });
+    return;
+  }
 
-      const res = await api.get<CatalogResponse>("/vocab/catalog", { params });
-      const data = res.data;
+  // Abort previous request
+  abortRef.current?.abort();
+  const ac = new AbortController();
+  abortRef.current = ac;
 
-      setItems(data.items);
-      setTotal(data.total);
+  const seq = ++reqSeqRef.current;
+
+  try {
+    // Avoid spinner flicker for very fast responses
+    if (loadingTimerRef.current) window.clearTimeout(loadingTimerRef.current);
+    loadingTimerRef.current = window.setTimeout(() => {
+      if (seq === reqSeqRef.current) setLoading(true);
+    }, 120);
+
+    const params: any = { q: qDebounced, filter, page: p, limit };
+    if (hsk !== "all") params.hsk = hsk;
+
+    const res = await api.get<CatalogResponse>("/vocab/catalog", {
+      params,
+      signal: ac.signal as any,
+    });
+    const data = res.data;
+
+    // Ignore stale responses
+    if (seq !== reqSeqRef.current) return;
+
+    startTransition(() => {
+      setItems(data.items || []);
+      setTotal(data.total || 0);
 
       const serverPage = data.page ?? p;
       setPage(serverPage);
       setPageInput(String(serverPage));
-    } catch (e) {
-      console.error(e);
-      toast.error("❌ Không tải được sổ từ vựng");
-    } finally {
-      setLoading(false);
-    }
+    });
+
+    catalogCacheRef.current.set(key, { ts: Date.now(), value: data });
+  } catch (e: any) {
+    if (e?.name === "CanceledError" || e?.code === "ERR_CANCELED") return;
+    console.error(e);
+    toast.error("❌ Không tải được sổ từ vựng");
+    setItems([]);
+    setTotal(0);
+  } finally {
+    if (loadingTimerRef.current) window.clearTimeout(loadingTimerRef.current);
+    if (seq === reqSeqRef.current) setLoading(false);
+  }
   };
 
   const gotoPage = (p: number) => {
@@ -148,19 +211,18 @@ export default function VocabBook() {
     fetchPage(next);
   };
 
-  // ✅ reload khi filter/q/hsk đổi
+  // ✅ reload khi filter/hsk/search (debounced) đổi
   useEffect(() => {
-    const t = setTimeout(() => {
-      setActive(null);
-      setPage(1);
-      setPageInput("1");
-      fetchPage(1);
-      setTodayStats(getDailyStats());
-      setPronMapState(getPronMap());
-    }, 250);
-    return () => clearTimeout(t);
+    setActive(null);
+    setCheckedIds(new Set());
+    setPage(1);
+    setPageInput("1");
+    listScrollRef.current?.scrollTo({ top: 0 });
+    fetchPage(1);
+    setTodayStats(getDailyStats());
+    // NOTE: pronMap đọc localStorage + parse JSON khá nặng => chỉ update khi focus (bên dưới)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, hsk, debouncedQ]);
+  }, [filter, hsk, qDebounced]);
 
   // ✅ quay lại tab/window thì refetch => status + pron + stats cập nhật ngay
   useEffect(() => {
@@ -172,7 +234,7 @@ export default function VocabBook() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, hsk, debouncedQ, page]);
+  }, [filter, hsk, qDebounced, page]);
 
   // nếu total giảm làm page vượt trần (ví dụ lọc hsk) => clamp
   useEffect(() => {
@@ -185,6 +247,8 @@ export default function VocabBook() {
   const toggleMyList = async (vocabId: number) => {
     setItems((prev) => prev.map((it) => (it.id === vocabId ? { ...it, selected: !it.selected } : it)));
     if (active?.id === vocabId) setActive({ ...active, selected: !active.selected });
+    // data đã thay đổi => cache trang cũ có thể stale
+    catalogCacheRef.current.clear();
 
     try {
       const res = await api.post("/vocab/my-list/toggle", { vocabId });
@@ -200,6 +264,78 @@ export default function VocabBook() {
       setItems((prev) => prev.map((it) => (it.id === vocabId ? { ...it, selected: !it.selected } : it)));
       if (active?.id === vocabId) setActive({ ...active, selected: !active.selected });
     }
+  };
+
+  const setChecked = (id: number, on: boolean) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const tickAllInPage = () => {
+    // Chỉ cập nhật state 1 lần (không loop setState), giúp mượt.
+    const ids = items.map((it) => it.id);
+    setCheckedIds(new Set(ids));
+  };
+
+  const clearTick = () => {
+    setCheckedIds(new Set());
+    // Cho UX: user bấm bỏ chọn trong lúc bulk đang chạy vẫn ok.
+    bulkAbortRef.current.aborted = true;
+  };
+
+  const bulkSetMyList = async (ids: number[], add: boolean) => {
+    const vocabIds = Array.from(new Set(ids))
+      .map((x) => Math.round(Number(x)))
+      .filter((x) => Number.isFinite(x) && x > 0);
+
+    if (!vocabIds.length) return;
+
+    const idSet = new Set(vocabIds);
+
+    setBulkBusy(true);
+
+    // Optimistic UI (instant)
+    setItems((prev) => prev.map((it) => (idSet.has(it.id) ? { ...it, selected: add } : it)));
+    if (active && idSet.has(active.id)) setActive({ ...active, selected: add });
+
+    try {
+      await api.post("/vocab/my-list/bulk", {
+        action: add ? "add" : "remove",
+        vocabIds,
+      });
+
+      // data đã thay đổi => cache trang cũ có thể stale
+      catalogCacheRef.current.clear();
+
+      // keep checkbox selection coherent
+      if (!add) {
+        setCheckedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of vocabIds) next.delete(id);
+          return next;
+        });
+      }
+
+      toast.success(add ? `✅ Đã thêm ${vocabIds.length} từ vào My List` : `🗑️ Đã bỏ ${vocabIds.length} từ khỏi My List`);
+    } catch (e) {
+      console.error(e);
+      toast.error("❌ Không cập nhật được My List");
+      // rollback by refetch current page
+      await fetchPage(page);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+
+  const bulkRemoveChecked = async () => {
+    const ids = Array.from(checkedIds);
+    await bulkSetMyList(ids, false);
+    clearTick();
   };
 
   const speak = (text: string) => {
@@ -418,11 +554,62 @@ export default function VocabBook() {
 
       <div className="vb-grid">
         <div className="vb-list">
-          <div className="vb-list-scroll" role="list">
+          <div className="vb-bulkbar" aria-label="Bulk actions">
+            <div className="vb-bulk-left">
+              Đã chọn: <b>{checkedIds.size}</b>
+            </div>
+            <div className="vb-bulk-actions">
+              {/* Chọn/Bỏ chọn chỉ là UI, không nên bị khóa khi đang bulk add/remove */}
+              <button className="vb-bulk-btn" onClick={tickAllInPage} disabled={loading || items.length === 0}>
+                Chọn tất cả
+              </button>
+              <button className="vb-bulk-btn" onClick={clearTick} disabled={loading || checkedIds.size === 0}>
+                Bỏ chọn
+              </button>
+              <button className="vb-bulk-btn danger" onClick={bulkRemoveChecked} disabled={loading || bulkBusy || checkedIds.size === 0}>
+                🗑️ Xóa (đã chọn)
+              </button>
+
+              <span className="vb-bulk-sep" />
+
+              <button
+                className="vb-bulk-btn"
+                onClick={() => bulkSetMyList(items.map((it) => it.id), true)}
+                disabled={loading || bulkBusy || items.length === 0}
+                title="Thêm tất cả mục đang hiển thị vào Danh sách của tôi"
+              >
+                + Thêm tất cả (trang)
+              </button>
+              <button
+                className="vb-bulk-btn"
+                onClick={() => bulkSetMyList(items.map((it) => it.id), false)}
+                disabled={loading || bulkBusy || items.length === 0}
+                title="Bỏ tất cả mục đang hiển thị khỏi Danh sách của tôi"
+              >
+                Bỏ tất cả (trang)
+              </button>
+            </div>
+          </div>
+
+          <div className="vb-list-scroll" role="list" ref={listScrollRef}>
             {items.map((it) => {
               const p = pronMap[it.id];
               return (
                 <div key={it.id} className={`vb-item ${active?.id === it.id ? "active" : ""}`} onClick={() => setActive(it)} role="listitem">
+                  <div
+                    className="vb-check"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedIds.has(it.id)}
+                      onChange={(e) => setChecked(it.id, e.target.checked)}
+                      aria-label={`Chọn từ ${it.zh}`}
+                    />
+                  </div>
+
                   <div className="vb-main">
                     <div className="vb-zh">{it.zh}</div>
                     <div className="vb-subline">

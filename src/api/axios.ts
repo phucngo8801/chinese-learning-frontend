@@ -5,6 +5,8 @@ import { clearAuthToken, getAuthToken } from "../lib/authToken";
 const axios = Axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
   headers: { "Content-Type": "application/json" },
+  // UX: tránh treo request quá lâu khi backend chết / mạng kém
+  timeout: 15000,
 });
 
 // ✅ Auto attach Bearer token
@@ -23,6 +25,11 @@ axios.interceptors.request.use((config) => {
 axios.interceptors.response.use(
   (res) => res,
   (err) => {
+    // Abort/cancel (ví dụ user bấm đổi HSK liên tục) => không show toast "mất kết nối"
+    if (err?.code === "ERR_CANCELED" || err?.name === "CanceledError") {
+      return Promise.reject(err);
+    }
+
     const status = err?.response?.status;
 
     // Network / CORS / server down
